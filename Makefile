@@ -32,11 +32,24 @@ format:
 	ruff format api/ tests/
 
 clean:
+ifeq ($(OS),Windows_NT)
+	@powershell -Command "Get-ChildItem -Path . -Recurse -Directory -Filter '__pycache__' | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue"
+	@powershell -Command "Get-ChildItem -Path . -Recurse -Filter '*.pyc' | Remove-Item -Force -ErrorAction SilentlyContinue"
+	@powershell -Command "Get-ChildItem -Path . -Recurse -Filter '*.pyo' | Remove-Item -Force -ErrorAction SilentlyContinue"
+	@powershell -Command "Get-ChildItem -Path . -Recurse -Directory -Filter '*.egg-info' | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue"
+	@if exist .pytest_cache rmdir /s /q .pytest_cache
+	@if exist htmlcov rmdir /s /q htmlcov
+	@if exist .mypy_cache rmdir /s /q .mypy_cache
+	@if exist .tox rmdir /s /q .tox
+	@if exist .ruff_cache rmdir /s /q .ruff_cache
+	@if exist .coverage del /q .coverage
+else
 	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 	find . -type f -name "*.pyc" -delete
 	find . -type f -name "*.pyo" -delete
 	find . -type d -name "*.egg-info" -exec rm -rf {} + 2>/dev/null || true
-	rm -rf .pytest_cache .coverage htmlcov/ .mypy_cache/ .tox/
+	rm -rf .pytest_cache .coverage htmlcov/ .mypy_cache/ .tox/ .ruff_cache/
+endif
 
 docker-build:
 	docker build -t lead-scoring-api:latest .
@@ -56,7 +69,7 @@ docker-compose-down:
 load-test:
 	locust -f tests/load/locustfile.py \
 		--host=http://localhost:8000 \
-		--users=100 \
+		--users=300 \
 		--spawn-rate=10 \
 		--run-time=1m \
 		--headless \
