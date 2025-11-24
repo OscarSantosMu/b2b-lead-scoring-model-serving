@@ -1,0 +1,372 @@
+{
+    "id": null,
+    "uid": "lead-scoring-main",
+    "title": "B2B Lead Scoring API - Production Monitoring",
+    "tags": [
+        "lead-scoring",
+        "ml",
+        "api",
+        "production"
+    ],
+    "timezone": "browser",
+    "schemaVersion": 38,
+    "version": 1,
+    "refresh": "10s",
+    "time": {
+        "from": "now-1h",
+        "to": "now"
+    },
+    "panels": [{
+            "id": 1,
+            "title": "Request Rate (RPS)",
+            "type": "graph",
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 0
+            },
+            "targets": [{
+                    "expr": "rate(http_requests_total[5m])",
+                    "legendFormat": "Request Rate",
+                    "refId": "A"
+                },
+                {
+                    "expr": "250",
+                    "legendFormat": "Scale Threshold (250 RPS)",
+                    "refId": "B"
+                }
+            ],
+            "yaxes": [{
+                    "format": "reqps",
+                    "label": "Requests/sec"
+                },
+                {
+                    "format": "short"
+                }
+            ]
+        },
+        {
+            "id": 2,
+            "title": "Response Time (p50, p95, p99)",
+            "type": "graph",
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 0
+            },
+            "targets": [{
+                    "expr": "histogram_quantile(0.50, rate(http_request_duration_seconds_bucket[5m]))",
+                    "legendFormat": "p50",
+                    "refId": "A"
+                },
+                {
+                    "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))",
+                    "legendFormat": "p95",
+                    "refId": "B"
+                },
+                {
+                    "expr": "histogram_quantile(0.99, rate(http_request_duration_seconds_bucket[5m]))",
+                    "legendFormat": "p99",
+                    "refId": "C"
+                }
+            ],
+            "yaxes": [{
+                    "format": "s",
+                    "label": "Response Time"
+                },
+                {
+                    "format": "short"
+                }
+            ]
+        },
+        {
+            "id": 3,
+            "title": "CPU Usage (%)",
+            "type": "graph",
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 8
+            },
+            "targets": [{
+                    "expr": "system_cpu_usage_percent",
+                    "legendFormat": "System CPU",
+                    "refId": "A"
+                },
+                {
+                    "expr": "process_cpu_usage_percent",
+                    "legendFormat": "Process CPU",
+                    "refId": "B"
+                },
+                {
+                    "expr": "80",
+                    "legendFormat": "Warning Threshold (80%)",
+                    "refId": "C"
+                }
+            ],
+            "yaxes": [{
+                    "format": "percent",
+                    "label": "CPU Usage",
+                    "max": 100
+                },
+                {
+                    "format": "short"
+                }
+            ]
+        },
+        {
+            "id": 4,
+            "title": "Memory Usage (%)",
+            "type": "graph",
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 8
+            },
+            "targets": [{
+                    "expr": "system_memory_usage_percent",
+                    "legendFormat": "System Memory",
+                    "refId": "A"
+                },
+                {
+                    "expr": "80",
+                    "legendFormat": "Warning Threshold (80%)",
+                    "refId": "B"
+                }
+            ],
+            "yaxes": [{
+                    "format": "percent",
+                    "label": "Memory Usage",
+                    "max": 100
+                },
+                {
+                    "format": "short"
+                }
+            ]
+        },
+        {
+            "id": 5,
+            "title": "Model Predictions by Tier",
+            "type": "graph",
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 16
+            },
+            "targets": [{
+                    "expr": "rate(model_predictions_total{tier=\"hot\"}[5m])",
+                    "legendFormat": "Hot Tier",
+                    "refId": "A"
+                },
+                {
+                    "expr": "rate(model_predictions_total{tier=\"warm\"}[5m])",
+                    "legendFormat": "Warm Tier",
+                    "refId": "B"
+                },
+                {
+                    "expr": "rate(model_predictions_total{tier=\"cold\"}[5m])",
+                    "legendFormat": "Cold Tier",
+                    "refId": "C"
+                }
+            ],
+            "yaxes": [{
+                    "format": "short",
+                    "label": "Predictions/sec"
+                },
+                {
+                    "format": "short"
+                }
+            ]
+        },
+        {
+            "id": 6,
+            "title": "Model Prediction Latency",
+            "type": "graph",
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 16
+            },
+            "targets": [{
+                    "expr": "histogram_quantile(0.95, rate(model_prediction_latency_seconds_bucket{endpoint_provider=\"local\"}[5m]))",
+                    "legendFormat": "Local (p95)",
+                    "refId": "A"
+                },
+                {
+                    "expr": "histogram_quantile(0.95, rate(model_prediction_latency_seconds_bucket{endpoint_provider=\"sagemaker\"}[5m]))",
+                    "legendFormat": "SageMaker (p95)",
+                    "refId": "B"
+                },
+                {
+                    "expr": "histogram_quantile(0.95, rate(model_prediction_latency_seconds_bucket{endpoint_provider=\"azure\"}[5m]))",
+                    "legendFormat": "Azure ML (p95)",
+                    "refId": "C"
+                }
+            ],
+            "yaxes": [{
+                    "format": "s",
+                    "label": "Latency"
+                },
+                {
+                    "format": "short"
+                }
+            ]
+        },
+        {
+            "id": 7,
+            "title": "Error Rate (%)",
+            "type": "graph",
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 24
+            },
+            "targets": [{
+                    "expr": "sum(rate(http_requests_total{status=~\"5..\"}[5m])) / sum(rate(http_requests_total[5m])) * 100",
+                    "legendFormat": "5xx Error Rate",
+                    "refId": "A"
+                },
+                {
+                    "expr": "sum(rate(http_requests_total{status=~\"4..\"}[5m])) / sum(rate(http_requests_total[5m])) * 100",
+                    "legendFormat": "4xx Error Rate",
+                    "refId": "B"
+                },
+                {
+                    "expr": "5",
+                    "legendFormat": "Critical Threshold (5%)",
+                    "refId": "C"
+                }
+            ],
+            "yaxes": [{
+                    "format": "percent",
+                    "label": "Error Rate"
+                },
+                {
+                    "format": "short"
+                }
+            ]
+        },
+        {
+            "id": 8,
+            "title": "Confidence Score Distribution",
+            "type": "heatmap",
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 32
+            },
+            "targets": [{
+                "expr": "rate(model_prediction_confidence_bucket[5m])",
+                "legendFormat": "{{le}}",
+                "refId": "A",
+                "format": "heatmap"
+            }]
+        },
+        {
+            "id": 9,
+            "title": "Request/Response Size",
+            "type": "graph",
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 32
+            },
+            "targets": [{
+                    "expr": "rate(http_request_size_bytes_sum[5m]) / rate(http_request_size_bytes_count[5m])",
+                    "legendFormat": "Avg Request Size",
+                    "refId": "A"
+                },
+                {
+                    "expr": "rate(http_response_size_bytes_sum[5m]) / rate(http_response_size_bytes_count[5m])",
+                    "legendFormat": "Avg Response Size",
+                    "refId": "B"
+                }
+            ],
+            "yaxes": [{
+                    "format": "bytes",
+                    "label": "Size"
+                },
+                {
+                    "format": "short"
+                }
+            ]
+        },
+        {
+            "id": 10,
+            "title": "Model Prediction Errors",
+            "type": "graph",
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 32
+            },
+            "targets": [{
+                    "expr": "rate(model_prediction_errors_total[5m])",
+                    "legendFormat": "Error Rate",
+                    "refId": "A"
+                },
+                {
+                    "expr": "0.01",
+                    "legendFormat": "Critical Threshold (0.01/sec)",
+                    "refId": "B"
+                }
+            ],
+            "yaxes": [{
+                    "format": "short",
+                    "label": "Errors/sec"
+                },
+                {
+                    "format": "short"
+                }
+            ]
+        }
+    ],
+    "templating": {
+        "list": [{
+                "name": "datasource",
+                "type": "datasource",
+                "query": "prometheus"
+            },
+            {
+                "name": "interval",
+                "type": "interval",
+                "query": "1m,5m,10m,30m,1h",
+                "auto": true,
+                "auto_count": 30,
+                "auto_min": "10s"
+            }
+        ]
+    },
+    "annotations": {
+        "list": [{
+                "name": "Deployments",
+                "datasource": "Prometheus",
+                "enable": true,
+                "iconColor": "blue",
+                "tags": [
+                    "deployment"
+                ]
+            },
+            {
+                "name": "Alerts",
+                "datasource": "Prometheus",
+                "enable": true,
+                "iconColor": "red",
+                "expr": "ALERTS{alertstate=\"firing\"}",
+                "tags": [
+                    "alert"
+                ]
+            }
+        ]
+    }
+}

@@ -6,6 +6,7 @@ import logging
 import os
 from datetime import UTC, datetime
 
+import psutil
 from fastapi import APIRouter, Response, status
 from prometheus_client import CONTENT_TYPE_LATEST, REGISTRY, generate_latest
 
@@ -108,6 +109,7 @@ async def status_check():
                 "version": model.model_version,
                 "loaded": model.model is not None,
                 "n_features": len(model.feature_names),
+                "endpoint_provider": model.endpoint_provider,
             },
             "environment": {
                 "python_version": os.sys.version,
@@ -122,3 +124,76 @@ async def status_check():
             "error": str(e),
             "timestamp": datetime.now(UTC).isoformat(),
         }
+
+
+@router.get(
+    "/resources",
+    summary="Resource usage",
+    description="Get real-time system resource usage metrics",
+)
+async def resource_check():
+    """Resource usage information with detailed metrics."""
+    try:
+        # CPU metrics
+        cpu_percent = psutil.cpu_percent(interval=0.1)
+        cpu_count = psutil.cpu_count()
+
+        # Memory metrics
+        memory = psutil.virtual_memory()
+
+        # Disk metrics
+        disk = psutil.disk_usage("/")
+
+        # Process metrics
+        process = psutil.Process()
+        process_memory = process.memory_info()
+
+        # Network metrics (if available)
+        network = psutil.net_io_counters()
+
+        return {
+            "status": "ok",
+            "cpu": {
+                "usage_percent": round(cpu_percent, 2),
+                "count": cpu_count,
+                "per_cpu": [
+                    round(p, 2) for p in psutil.cpu_percent(interval=0.1, percpu=True)
+                ],
+            },
+            "memory": {
+                "total_mb": round(memory.total / 1024 / 1024, 2),
+                "available_mb": round(memory.available / 1024 / 1024, 2),
+                "used_mb": round(memory.used / 1024 / 1024, 2),
+                "usage_percent": round(memory.percent, 2),
+            },
+            "disk": {
+                "total_gb": round(disk.total / 1024 / 1024 / 1024, 2),
+                "used_gb": round(disk.used / 1024 / 1024 / 1024, 2),
+                "free_gb": round(disk.free / 1024 / 1024 / 1024, 2),
+                "usage_percent": round(disk.percent, 2),
+            },
+            "process": {
+                "memory_mb": round(process_memory.rss / 1024 / 1024, 2),
+                "cpu_percent": round(process.cpu_percent(), 2),
+                "threads": process.num_threads(),
+                "open_files": len(process.open_files()),
+            },
+            "network": {
+                "bytes_sent_mb": round(network.bytes_sent / 1024 / 1024, 2),
+                "bytes_recv_mb": round(network.bytes_recv / 1024 / 1024, 2),
+                "packets_sent": network.packets_sent,
+                "packets_recv": network.packets_recv,
+            },
+            "alerts": {
+                "high_cpu": cpu_percent > 80,
+                "high_memory": memory.percent > 80,
+                "low_disk": disk.percent > 85,
+            },
+            "timestamp": datetime.now(UTC).isoformat(),
+        }
+    except Exception as e:
+        logger.error(f"Resource check failed: {e}")
+        return Response(
+            content=f"Resource check failed: {str(e)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )

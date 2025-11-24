@@ -1,0 +1,268 @@
+# Prometheus Alert Rules for B2B Lead Scoring API
+# Converted from monitoring/alerts.yml to Prometheus format
+
+groups:
+  - name: performance_alerts
+    interval: 30s
+    rules:
+      - alert: HighLatency
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (
+              rate(http_request_duration_seconds_bucket{job="lead-scoring-api"}[5m])
+            )
+          ) > 0.5
+        for: 2m
+        labels:
+          severity: warning
+          component: api
+        annotations:
+          summary: "High API latency detected"
+          description: "API p95 response time is {{ $value }}s (threshold: 0.5s)"
+          action: "Check logs/infra and scale up if needed."
+
+      - alert: CriticalLatency
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (
+              rate(http_request_duration_seconds_bucket{job="lead-scoring-api"}[5m])
+            )
+          ) > 1.0
+        for: 1m
+        labels:
+          severity: critical
+          component: api
+        annotations:
+          summary: "Critical API latency"
+          description: "API p95 response time is {{ $value }}s (threshold: 1.0s)"
+          action: "Immediate investigation required. Check logs & infra, consider rollback/scale-out."
+
+      - alert: SlowModelPredictions
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (
+              rate(model_prediction_latency_seconds_bucket{job="lead-scoring-api"}[5m])
+            )
+          ) > 0.1
+        for: 3m
+        labels:
+          severity: warning
+          component: ml-model
+        annotations:
+          summary: "Slow model predictions"
+          description: "Model prediction p95 latency is {{ $value }}s (threshold: 0.1s)"
+          action: "Check endpoint, feature pipeline, and consider caching/optimization."
+
+  - name: resource_alerts
+    interval: 30s
+    rules:
+      - alert: HighCPU
+        expr: system_cpu_usage_percent > 80
+        for: 5m
+        labels:
+          severity: warning
+          component: infrastructure
+        annotations:
+          summary: "High CPU utilization"
+          description: "System CPU usage is {{ $value }}% (threshold: 80%)"
+          action: "Check for inefficient queries, consider scaling. Triggers auto-scaling."
+
+      - alert: CriticalCPU
+        expr: system_cpu_usage_percent > 95
+        for: 2m
+        labels:
+          severity: critical
+          component: infrastructure
+        annotations:
+          summary: "Critical CPU utilization"
+          description: "System CPU usage is {{ $value }}% (threshold: 95%)"
+          action: "Immediate scaling required, investigate CPU-intensive processes"
+
+      - alert: HighMemory
+        expr: system_memory_usage_percent > 80
+        for: 5m
+        labels:
+          severity: warning
+          component: infrastructure
+        annotations:
+          summary: "High memory utilization"
+          description: "System memory usage is {{ $value }}% (threshold: 80%)"
+          action: "Check for memory leaks, consider increasing memory. Triggers auto-scaling."
+
+      - alert: CriticalMemory
+        expr: system_memory_usage_percent > 90
+        for: 2m
+        labels:
+          severity: critical
+          component: infrastructure
+        annotations:
+          summary: "Critical memory utilization"
+          description: "System memory usage is {{ $value }}% (threshold: 90%)"
+          action: "Risk of OOM, immediate scaling or restart needed"
+
+      - alert: LowDiskSpace
+        expr: system_disk_usage_percent > 85
+        for: 5m
+        labels:
+          severity: warning
+          component: infrastructure
+        annotations:
+          summary: "Low disk space"
+          description: "Disk usage is {{ $value }}% (threshold: 85%)"
+          action: "Clean up logs, increase storage"
+
+      - alert: HighProcessMemory
+        expr: process_memory_usage_bytes > 2147483648
+        for: 5m
+        labels:
+          severity: warning
+          component: application
+        annotations:
+          summary: "High process memory usage"
+          description: "Process memory usage is {{ $value | humanize }}B (threshold: 2GB)"
+          action: "Check for memory leaks in application"
+
+  - name: availability_alerts
+    interval: 30s
+    rules:
+      - alert: HighErrorRate
+        expr: |
+          (
+            sum(rate(http_requests_total{status=~"5.."}[5m]))
+            /
+            sum(rate(http_requests_total[5m]))
+          ) > 0.05
+        for: 3m
+        labels:
+          severity: critical
+          component: api
+        annotations:
+          summary: "High HTTP error rate"
+          description: "HTTP error rate is {{ $value | humanizePercentage }} (threshold: 5%)"
+          action: "Check logs immediately, may need rollback"
+
+      - alert: ServiceDown
+        expr: up{job="lead-scoring-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: api
+        annotations:
+          summary: "Service is down"
+          description: "Lead Scoring API is not responding"
+          action: "Immediate investigation, check container status, restart if needed"
+
+      - alert: HighActiveRequests
+        expr: http_requests_active > 100
+        for: 2m
+        labels:
+          severity: warning
+          component: api
+        annotations:
+          summary: "High number of concurrent requests"
+          description: "Active requests: {{ $value }} (threshold: 100)"
+          action: "Check for stuck requests, consider scaling"
+
+  - name: ml_model_alerts
+    interval: 30s
+    rules:
+      - alert: ModelPredictionErrors
+        expr: rate(model_prediction_errors_total[5m]) > 0.01
+        for: 3m
+        labels:
+          severity: critical
+          component: ml-model
+        annotations:
+          summary: "High model prediction error rate"
+          description: "Model error rate is {{ $value }} errors/sec (threshold: 0.01/sec)"
+          action: "Check endpoint health, input validation, model compatibility"
+
+      - alert: UnbalancedPredictions
+        expr: |
+          (
+            rate(model_predictions_total{tier="hot"}[10m])
+            /
+            rate(model_predictions_total[10m])
+          ) > 0.5
+        for: 10m
+        labels:
+          severity: warning
+          component: ml-model
+        annotations:
+          summary: "Unbalanced prediction distribution"
+          description: "{{ $value | humanizePercentage }} of predictions are 'hot' tier (threshold: 50%)"
+          action: "Check for data drift, model may need retraining"
+
+      - alert: LowConfidencePredictions
+        expr: histogram_quantile(0.5, rate(model_prediction_confidence_bucket[10m])) < 0.6
+        for: 10m
+        labels:
+          severity: warning
+          component: ml-model
+        annotations:
+          summary: "Low prediction confidence"
+          description: "Median prediction confidence is {{ $value }} (threshold: 0.6)"
+          action: "Investigate model performance, check for data quality issues"
+
+  - name: scaling_alerts
+    interval: 30s
+    rules:
+      - alert: HighRequestRate
+        expr: rate(http_requests_total[1m]) > 250
+        for: 2m
+        labels:
+          severity: info
+          component: api
+        annotations:
+          summary: "High request rate"
+          description: "Request rate is {{ $value }} req/s (approaching 300 RPS target)"
+          action: "Monitor for potential need to scale, prepare for auto-scaling trigger"
+
+      - alert: SlowBatchProcessing
+        expr: |
+          histogram_quantile(0.95, rate(model_batch_size_bucket[5m])) > 50
+          and
+          histogram_quantile(0.95, rate(model_prediction_latency_seconds_bucket[5m])) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          component: ml-model
+        annotations:
+          summary: "Slow batch processing"
+          description: "Large batches with slow processing detected"
+          action: "Optimize batch processing or reduce batch size"
+
+      - alert: EndpointPerformanceDegradation
+        expr: |
+          histogram_quantile(
+            0.95,
+            rate(model_prediction_latency_seconds_bucket{endpoint_provider!="local"}[5m])
+          ) > 0.3
+        for: 5m
+        labels:
+          severity: warning
+          component: ml-model
+        annotations:
+          summary: "Cloud endpoint performance degradation"
+          description: "Cloud endpoint p95 latency is {{ $value }}s (threshold: 0.3s)"
+          action: "Check SageMaker/Azure ML endpoint health, consider fallback to local"
+
+  - name: traffic_alerts
+    interval: 30s
+    rules:
+      - alert: UnusualTrafficSpike
+        expr: |
+          rate(http_requests_total[5m])
+          /
+          rate(http_requests_total[5m] offset 1h) > 3
+        for: 10m
+        labels:
+          severity: warning
+          component: api
+        annotations:
+          summary: "Unusual traffic spike detected"
+          description: "Traffic increased by {{ $value }}x compared to 1 hour ago"
+          action: "Check for abuse, DDoS, or legitimate traffic increase"

@@ -68,6 +68,11 @@ crash.log
 # Docker
 docker-compose.override.yml
 
+# Monitoring data (local only)
+prometheus_data/
+alertmanager_data/
+grafana_data/
+
 # Temporary files
 tmp/
 temp/

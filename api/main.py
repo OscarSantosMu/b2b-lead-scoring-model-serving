@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from api.middleware.metrics import MetricsMiddleware
 from fastapi.responses import JSONResponse
 
 from api.middleware.logging_middleware import RequestLoggingMiddleware, setup_logging
@@ -56,8 +57,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Add logging middleware
+# Add middleware (order matters - metrics first, then logging)
 app.add_middleware(RequestLoggingMiddleware)
+app.add_middleware(MetricsMiddleware)
 
 # Include routers
 app.include_router(health.router)
@@ -94,7 +96,7 @@ if __name__ == "__main__":
     uvicorn.run(
         "api.main:app",
         host=os.getenv("HOST", "127.0.0.1"),
-        port=8000,
+        port=int(os.getenv("PORT", 8000)),
         reload=os.getenv("ENV", "production") != "production",
         log_level="info",
     )

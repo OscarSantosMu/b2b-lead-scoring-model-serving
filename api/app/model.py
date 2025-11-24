@@ -18,12 +18,34 @@ from api.app.endpoint_client import EndpointClient, get_endpoint_client
 logger = logging.getLogger(__name__)
 
 # Metrics
-PREDICTION_COUNTER = Counter("model_predictions_total", "Total predictions made")
-PREDICTION_LATENCY = Histogram("model_prediction_latency_seconds", "Prediction latency")
+PREDICTION_COUNTER = Counter(
+    "model_predictions_total", "Total predictions made", ["endpoint_provider", "tier"]
+)
+PREDICTION_LATENCY = Histogram(
+    "model_prediction_latency_seconds",
+    "Prediction latency",
+    ["endpoint_provider"],
+    buckets=[0.001, 0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 1.0],
+)
 PREDICTION_SCORE_HISTOGRAM = Histogram(
     "model_prediction_scores",
     "Distribution of prediction scores",
+    ["endpoint_provider"],
     buckets=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
+)
+PREDICTION_CONFIDENCE_HISTOGRAM = Histogram(
+    "model_prediction_confidence",
+    "Distribution of prediction confidence scores",
+    ["endpoint_provider", "tier"],
+    buckets=[0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.99, 1.0],
+)
+PREDICTION_ERRORS = Counter(
+    "model_prediction_errors_total",
+    "Total prediction errors",
+    ["endpoint_provider", "error_type"],
+)
+BATCH_SIZE_HISTOGRAM = Histogram(
+    "model_batch_size", "Batch prediction sizes", buckets=[1, 5, 10, 25, 50, 75, 100]
 )
 
 
@@ -50,7 +72,9 @@ class LeadScoringModel:
         self.model_metadata = {}
 
         # Determine mode: local or endpoint
-        self.endpoint_provider = endpoint_provider or os.getenv("MODEL_ENDPOINT_PROVIDER", "local")
+        self.endpoint_provider = endpoint_provider or os.getenv(
+            "MODEL_ENDPOINT_PROVIDER", "local"
+        )
         self.endpoint_client: EndpointClient | None = None
 
         if self.endpoint_provider.lower() != "local":
@@ -179,7 +203,9 @@ class LeadScoringModel:
                 np.random.binomial(1, 0.5, n_samples),  # competitor_evaluation
                 np.random.binomial(1, 0.35, n_samples),  # technical_evaluation_started
                 np.random.binomial(1, 0.15, n_samples),  # contract_reviewed
-                np.random.binomial(1, 0.2, n_samples),  # security_questionnaire_completed
+                np.random.binomial(
+                    1, 0.2, n_samples
+                ),  # security_questionnaire_completed
                 np.random.binomial(1, 0.3, n_samples),  # roi_calculator_used
                 np.random.binomial(1, 0.25, n_samples),  # custom_demo_requested
                 np.random.poisson(2, n_samples),  # integration_questions_asked
@@ -302,7 +328,9 @@ class LeadScoringModel:
         if metadata_path.exists():
             with open(metadata_path) as f:
                 self.model_metadata = json.load(f)
-                self.model_version = self.model_metadata.get("version", self.model_version)
+                self.model_version = self.model_metadata.get(
+                    "version", self.model_version
+                )
 
         logger.info(f"Model loaded successfully, version: {self.model_version}")
 
@@ -341,6 +369,7 @@ class LeadScoringModel:
             Tuple of (score, confidence, tier)
         """
         start_time = time.time()
+        endpoint_provider = self.endpoint_provider
 
         try:
             # Preprocess features
@@ -368,19 +397,72 @@ class LeadScoringModel:
             else:
                 tier = "cold"
 
-            # Record metrics
-            PREDICTION_COUNTER.inc()
-            PREDICTION_SCORE_HISTOGRAM.observe(score)
+            # Record detailed metrics
+            PREDICTION_COUNTER.labels(
+                endpoint_provider=endpoint_provider, tier=tier
+            ).inc()
+
+            PREDICTION_SCORE_HISTOGRAM.labels(
+                endpoint_provider=endpoint_provider
+            ).observe(score)
+
+            PREDICTION_CONFIDENCE_HISTOGRAM.labels(
+                endpoint_provider=endpoint_provider, tier=tier
+            ).observe(confidence)
+
+            # Log prediction with context
+            logger.info(
+                "Prediction completed",
+                extra={
+                    "endpoint_provider": endpoint_provider,
+                    "score": round(score, 4),
+                    "confidence": round(confidence, 4),
+                    "tier": tier,
+                    "latency_ms": round((time.time() - start_time) * 1000, 2),
+                },
+            )
 
             return score, confidence, tier
+
+        except Exception as e:
+            # Record error metrics
+            error_type = type(e).__name__
+            PREDICTION_ERRORS.labels(
+                endpoint_provider=endpoint_provider, error_type=error_type
+            ).inc()
+
+            logger.error(
+                "Prediction error",
+                extra={
+                    "endpoint_provider": endpoint_provider,
+                    "error_type": error_type,
+                    "error": str(e),
+                },
+            )
+            raise
 
         finally:
             # Record latency
             latency = time.time() - start_time
-            PREDICTION_LATENCY.observe(latency)
+            PREDICTION_LATENCY.labels(endpoint_provider=endpoint_provider).observe(
+                latency
+            )
 
-    def predict_batch(self, features_list: list[dict]) -> list[tuple[float, float, str]]:
+    def predict_batch(
+        self, features_list: list[dict]
+    ) -> list[tuple[float, float, str]]:
         """Make predictions for multiple leads."""
+        # Record batch size
+        BATCH_SIZE_HISTOGRAM.observe(len(features_list))
+
+        logger.info(
+            "Batch prediction started",
+            extra={
+                "batch_size": len(features_list),
+                "endpoint_provider": self.endpoint_provider,
+            },
+        )
+
         return [self.predict(features) for features in features_list]
 
     def get_feature_importance(self) -> dict[str, float]:
