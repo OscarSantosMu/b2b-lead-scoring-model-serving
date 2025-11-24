@@ -1,0 +1,45 @@
+# Example terraform.tfvars
+# Copy this file to terraform.tfvars and update with your values
+
+# Cloud provider selection: "aws" or "azure"
+cloud_provider = "azure"
+
+# Common configuration
+project_name = "lead-scoring"
+environment  = "dev"
+
+# Docker image - use the appropriate registry based on cloud_provider:
+# For Azure: docker_image = "leadscoringdevacr.azurecr.io/lead-scoring:latest"
+# For AWS:   docker_image = "123456789012.dkr.ecr.us-east-1.amazonaws.com/lead-scoring-dev:latest"
+# For dev:   docker_image = "ghcr.io/yourorg/lead-scoring-api:latest"
+docker_image = "ghcr.io/yourorg/lead-scoring-api:latest"
+
+# API keys (comma-separated)
+api_keys = "demo-key-123,prod-key-456"
+
+# Scaling configuration
+min_replicas = 2
+max_replicas = 10
+
+# Model endpoint configuration
+# Options: "local", "sagemaker", "azure"
+model_endpoint_provider = "local"
+
+# ===== Azure-specific configuration =====
+# Uncomment and configure if cloud_provider = "azure"
+
+azure_location = "East US"
+
+# Azure ML configuration (optional)
+# enable_azure_ml       = true
+# azure_ml_endpoint_url = "https://your-endpoint.azureml.net/score"
+# azure_ml_api_key      = "your-api-key"
+
+# ===== AWS-specific configuration =====
+# Uncomment and configure if cloud_provider = "aws"
+
+# aws_region = "us-east-1"
+
+# SageMaker configuration (optional)
+# enable_sagemaker_endpoint = true
+# sagemaker_endpoint_name   = "lead-scoring-endpoint"

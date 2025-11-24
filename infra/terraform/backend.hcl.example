@@ -1,0 +1,8 @@
+# Backend configuration for Azure Storage Account
+# Copy this file to backend.hcl and update with your values
+# Then run: terraform init -backend-config=backend.hcl
+
+resource_group_name  = "tfstate-rg"
+storage_account_name = "tfstateleadscoring"
+container_name       = "tfstate"
+key                  = "lead-scoring.tfstate"
