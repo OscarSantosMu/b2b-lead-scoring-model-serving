@@ -133,22 +133,132 @@ class LeadScoringModel:
         """Initialize a stub XGBoost model with reasonable parameters."""
         logger.info("Initializing stub XGBoost model")
 
-        # Create dummy training data with 50 features
+        # Create dummy training data with 50 features using realistic distributions
         n_samples = 1000
         np.random.seed(42)
 
-        # Generate synthetic feature data
-        X_train = np.random.randn(n_samples, 50)
+        # Generate synthetic feature data with realistic ranges
+        # Firmographics (0-9): mix of large numbers and ratios
+        X_train = np.column_stack(
+            [
+                np.random.lognormal(15, 2, n_samples),  # company_revenue (millions)
+                np.random.lognormal(3.5, 1.5, n_samples),  # company_employee_count
+                np.random.uniform(0.5, 20, n_samples),  # company_age_years
+                np.random.lognormal(14, 2, n_samples),  # company_funding_total
+                np.random.uniform(-0.2, 0.8, n_samples),  # company_growth_rate
+                np.random.uniform(0, 1, n_samples),  # industry_tech_score
+                np.random.randint(1, 4, n_samples),  # geographic_tier
+                np.random.binomial(1, 0.3, n_samples),  # company_public_status
+                np.random.binomial(1, 0.4, n_samples),  # parent_company_exists
+                np.random.poisson(2, n_samples),  # subsidiary_count
+                # Engagement (10-24): counts and rates
+                np.random.poisson(20, n_samples),  # website_visits_30d
+                np.random.poisson(60, n_samples),  # page_views_30d
+                np.random.uniform(30, 600, n_samples),  # avg_session_duration_sec
+                np.random.uniform(0.2, 0.8, n_samples),  # bounce_rate
+                np.random.poisson(3, n_samples),  # pricing_page_visits
+                np.random.poisson(2, n_samples),  # demo_page_visits
+                np.random.poisson(5, n_samples),  # documentation_views
+                np.random.uniform(0.1, 0.8, n_samples),  # email_open_rate
+                np.random.uniform(0.05, 0.4, n_samples),  # email_click_rate
+                np.random.poisson(5, n_samples),  # emails_received
+                np.random.poisson(1, n_samples),  # whitepaper_downloads
+                np.random.binomial(2, 0.3, n_samples),  # webinar_attendance
+                np.random.poisson(10, n_samples),  # social_media_engagement
+                np.random.poisson(1, n_samples),  # customer_success_interactions
+                np.random.poisson(1, n_samples),  # support_ticket_count
+                # Behavioral (25-39): days and binary flags
+                np.random.uniform(1, 180, n_samples),  # days_since_first_touch
+                np.random.uniform(0, 30, n_samples),  # days_since_last_touch
+                np.random.poisson(15, n_samples),  # total_touchpoints
+                np.random.binomial(1, 0.5, n_samples),  # multi_channel_engagement
+                np.random.binomial(1, 0.4, n_samples),  # decision_maker_contacted
+                np.random.binomial(1, 0.3, n_samples),  # champion_identified
+                np.random.binomial(1, 0.25, n_samples),  # budget_confirmed
+                np.random.binomial(1, 0.3, n_samples),  # timeline_confirmed
+                np.random.binomial(1, 0.5, n_samples),  # competitor_evaluation
+                np.random.binomial(1, 0.35, n_samples),  # technical_evaluation_started
+                np.random.binomial(1, 0.15, n_samples),  # contract_reviewed
+                np.random.binomial(1, 0.2, n_samples),  # security_questionnaire_completed
+                np.random.binomial(1, 0.3, n_samples),  # roi_calculator_used
+                np.random.binomial(1, 0.25, n_samples),  # custom_demo_requested
+                np.random.poisson(2, n_samples),  # integration_questions_asked
+                # Attribution (40-44): quality scores and counts
+                np.random.uniform(0.3, 1.0, n_samples),  # lead_source_quality
+                np.random.poisson(3, n_samples),  # attribution_touchpoints
+                np.random.binomial(1, 0.4, n_samples),  # paid_channel_source
+                np.random.binomial(1, 0.2, n_samples),  # referral_source
+                np.random.binomial(1, 0.15, n_samples),  # event_source
+                # Product Interest (45-49): tiers and counts
+                np.random.randint(0, 3, n_samples),  # product_tier_interest
+                np.random.poisson(1, n_samples),  # feature_requests_count
+                np.random.uniform(0.3, 1.0, n_samples),  # use_case_alignment
+                np.random.poisson(2, n_samples),  # integration_requirements
+                np.random.randint(0, 2, n_samples),  # deployment_preference
+            ]
+        )
 
-        # Generate synthetic labels with some pattern
-        # Higher engagement and firmographic signals -> higher conversion
-        engagement_score = X_train[:, 10:25].mean(axis=1)  # Engagement features
-        firmographic_score = X_train[:, 0:10].mean(axis=1)  # Firmographic features
-        behavioral_score = X_train[:, 25:40].mean(axis=1)  # Behavioral features
+        # Generate synthetic labels based on realistic patterns
+        # Normalize scores to 0-1 range for each category
+        engagement_score = np.clip(
+            (
+                X_train[:, 10] / 50  # website_visits normalized
+                + X_train[:, 14] / 10  # pricing_page_visits
+                + X_train[:, 15] / 10  # demo_page_visits
+                + X_train[:, 17]  # email_open_rate (already 0-1)
+                + X_train[:, 20] / 5  # whitepaper_downloads
+            )
+            / 5,
+            0,
+            1,
+        )
 
-        # Combine scores to create labels
-        combined_score = 0.4 * engagement_score + 0.3 * firmographic_score + 0.3 * behavioral_score
-        y_train = (combined_score > 0).astype(int)
+        behavioral_score = np.clip(
+            (
+                X_train[:, 29]  # decision_maker_contacted
+                + X_train[:, 30]  # champion_identified
+                + X_train[:, 31]  # budget_confirmed
+                + X_train[:, 32]  # timeline_confirmed
+                + X_train[:, 34]  # technical_evaluation_started
+            )
+            / 5,
+            0,
+            1,
+        )
+
+        product_score = np.clip(
+            (
+                X_train[:, 45] / 3  # product_tier_interest normalized
+                + X_train[:, 47]  # use_case_alignment (already 0-1)
+            )
+            / 2,
+            0,
+            1,
+        )
+
+        firmographic_score = np.clip(
+            (
+                (X_train[:, 0] > np.median(X_train[:, 0])).astype(float)  # high revenue
+                + (X_train[:, 1] > 20).astype(float)  # medium+ employee count
+                + X_train[:, 5]  # industry_tech_score (already 0-1)
+            )
+            / 3,
+            0,
+            1,
+        )
+
+        # Combine scores with weights to create conversion probability
+        combined_score = (
+            0.35 * engagement_score
+            + 0.30 * behavioral_score
+            + 0.20 * product_score
+            + 0.15 * firmographic_score
+        )
+
+        # Add some noise and convert to binary labels
+        # Adjust threshold to get ~40-50% conversion rate in training
+        noise = np.random.normal(0, 0.15, n_samples)
+        y_train = ((combined_score + noise) > 0.4).astype(int)
 
         # Train XGBoost model
         dtrain = xgb.DMatrix(X_train, label=y_train, feature_names=self.feature_names)
