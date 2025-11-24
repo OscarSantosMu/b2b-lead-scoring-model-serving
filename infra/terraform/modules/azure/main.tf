@@ -161,7 +161,7 @@ resource "azurerm_container_app" "main" {
       }
 
       liveness_probe {
-        transport        = "http"
+        transport        = "HTTP"
         path             = "/health/live"
         port             = 8000
         initial_delay    = 10
@@ -170,7 +170,7 @@ resource "azurerm_container_app" "main" {
       }
 
       readiness_probe {
-        transport        = "http"
+        transport        = "HTTP"
         path             = "/health/ready"
         port             = 8000
         interval_seconds = 10
