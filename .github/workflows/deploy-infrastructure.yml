@@ -174,12 +174,11 @@ jobs:
         run: |
           exitcode=0
           CLOUD_PROVIDER="${{ github.event.inputs.cloud_provider || 'azure' }}"
-          EXTRA_ARGS=""
 
           if [ "$CLOUD_PROVIDER" = "aws" ]; then
-            EXTRA_ARGS="-var=\"aws_region=${{ env.AWS_REGION }}\""
+            export TF_VAR_aws_region="${{ env.AWS_REGION }}"
           else
-            EXTRA_ARGS="-var=\"azure_location=${{ secrets.AZURE_LOCATION || 'East US' }}\""
+            export TF_VAR_azure_location="${{ secrets.AZURE_LOCATION || 'East US' }}"
           fi
 
           terraform plan -detailed-exitcode -no-color -out=tfplan \
@@ -188,7 +187,7 @@ jobs:
             -var="docker_image=${{ steps.docker-image.outputs.image }}" \
             -var="api_keys=${{ secrets.API_KEYS }}" \
             -var="project_name=${{ vars.PROJECT_NAME || 'lead-scoring' }}" \
-            $EXTRA_ARGS || exitcode=$?
+             || exitcode=$?
 
           echo "exitcode=$exitcode" >> $GITHUB_OUTPUT
 
@@ -264,12 +263,11 @@ jobs:
         if: ${{ github.event.inputs.action == 'destroy' }}
         run: |
           CLOUD_PROVIDER="${{ github.event.inputs.cloud_provider || 'azure' }}"
-          EXTRA_ARGS=""
 
           if [ "$CLOUD_PROVIDER" = "aws" ]; then
-            EXTRA_ARGS="-var=\"aws_region=${{ env.AWS_REGION }}\""
+            export TF_VAR_aws_region="${{ env.AWS_REGION }}"
           else
-            EXTRA_ARGS="-var=\"azure_location=${{ secrets.AZURE_LOCATION || 'East US' }}\""
+            export TF_VAR_azure_location="${{ secrets.AZURE_LOCATION || 'East US' }}"
           fi
 
           terraform destroy -auto-approve \
@@ -277,5 +275,4 @@ jobs:
             -var="cloud_provider=$CLOUD_PROVIDER" \
             -var="docker_image=${{ steps.docker-image.outputs.image }}" \
             -var="api_keys=${{ secrets.API_KEYS }}" \
-            -var="project_name=${{ vars.PROJECT_NAME || 'lead-scoring' }}" \
-            $EXTRA_ARGS
+            -var="project_name=${{ vars.PROJECT_NAME || 'lead-scoring' }}"
