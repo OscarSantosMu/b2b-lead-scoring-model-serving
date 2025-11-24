@@ -21,7 +21,7 @@ resource "azurerm_subnet" "container_apps" {
   name                 = "container-apps-subnet"
   resource_group_name  = azurerm_resource_group.main.name
   virtual_network_name = azurerm_virtual_network.main.name
-  address_prefixes     = ["10.0.1.0/24"]
+  address_prefixes     = ["10.0.1.0/23"]
 }
 
 # Log Analytics Workspace
@@ -161,7 +161,7 @@ resource "azurerm_container_app" "main" {
       }
 
       liveness_probe {
-        transport        = "http"
+        transport        = "HTTP"
         path             = "/health/live"
         port             = 8000
         initial_delay    = 10
@@ -170,7 +170,7 @@ resource "azurerm_container_app" "main" {
       }
 
       readiness_probe {
-        transport        = "http"
+        transport        = "HTTP"
         path             = "/health/ready"
         port             = 8000
         interval_seconds = 10

@@ -208,11 +208,14 @@ jobs:
             exit 0
           fi
 
+      - name: List files after plan
+        run: ls -lah
+
       - name: Publish Terraform Plan
         uses: actions/upload-artifact@v4
         with:
           name: tfplan-${{ github.event.inputs.environment || 'dev' }}
-          path: tfplan
+          path: infra/terraform/tfplan
           if-no-files-found: error
           retention-days: 7
 
@@ -241,18 +244,18 @@ jobs:
             })
 
       - name: Terraform Apply
-        if: ${{ github.event.inputs.action == 'apply' }} || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+        if: ${{ github.event.inputs.action == 'apply' || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
         run: terraform apply -auto-approve tfplan
 
       - name: Terraform Outputs
-        if: ${{ github.event.inputs.action == 'apply' }} || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+        if: ${{ github.event.inputs.action == 'apply' || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
         id: outputs
         run: |
           echo "api_url=$(terraform output -raw api_url)" >> $GITHUB_OUTPUT
           echo "cloud_provider=$(terraform output -raw deployed_cloud_provider)" >> $GITHUB_OUTPUT
 
       - name: Comment Outputs
-        if: (${{ github.event.inputs.action == 'apply' }} || (github.event_name == 'push' && github.ref == 'refs/heads/main'))) && github.event_name == 'pull_request'
+        if: ${{ (github.event.inputs.action == 'apply' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && github.event_name == 'pull_request' }}
         uses: actions/github-script@v7
         with:
           script: |
