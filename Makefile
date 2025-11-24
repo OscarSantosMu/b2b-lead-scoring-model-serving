@@ -15,21 +15,21 @@ install:
 	uv pip install -e ".[dev]"
 
 test:
-	pytest tests/ -v --cov=api --cov-report=html --cov-report=term
+	uv run pytest tests/ -v --cov=api --cov-report=html --cov-report=term
 
 test-unit:
-	pytest tests/unit/ -v
+	uv run pytest tests/unit/ -v
 
 test-integration:
-	pytest tests/integration/ -v
+	uv run pytest tests/integration/ -v
 
 lint:
-	ruff check api/ tests/
-	bandit -r api/
+	uv run ruff check api/ tests/
+	uv run bandit -r api/
 
 format:
-	ruff check --fix api/ tests/
-	ruff format api/ tests/
+	uv run ruff check --fix api/ tests/
+	uv run ruff format api/ tests/
 
 clean:
 ifeq ($(OS),Windows_NT)
@@ -67,7 +67,7 @@ docker-compose-down:
 	docker-compose down
 
 load-test:
-	locust -f tests/load/locustfile.py \
+	uv run locust -f tests/load/locustfile.py \
 		--host=http://localhost:8000 \
 		--users=300 \
 		--spawn-rate=10 \
@@ -76,4 +76,4 @@ load-test:
 		--html=loadtest-report.html
 
 dev:
-	uvicorn api.main:app --reload --port 8000
+	uv run uvicorn api.main:app --reload --port 8000
