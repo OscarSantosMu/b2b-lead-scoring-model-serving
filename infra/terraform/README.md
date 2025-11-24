@@ -280,6 +280,18 @@ az login
 terraform init -backend-config=backend.hcl
 ```
 
+### AWS Provider Credential Errors When Using Azure
+
+The Terraform configuration declares both AWS and Azure providers to support multi-cloud deployment. When deploying to Azure, the AWS provider is configured with credential validation skipped (`skip_credentials_validation = true`). However, you may still need to set dummy AWS credentials:
+
+```bash
+export AWS_ACCESS_KEY_ID=dummy
+export AWS_SECRET_ACCESS_KEY=dummy
+terraform plan -var="cloud_provider=azure"
+```
+
+The GitHub Actions workflow automatically sets these dummy credentials when `cloud_provider != 'aws'`.
+
 ### Plan Shows No Changes
 
 Verify cloud_provider variable matches existing deployment:
