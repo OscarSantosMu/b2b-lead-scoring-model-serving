@@ -1,0 +1,8 @@
+{
+  "lead_id": "LEAD-12345",
+  "score": 0.82,
+  "tier": "hot",
+  "confidence": 0.64,
+  "model_version": "1.0.0",
+  "timestamp": "2024-01-01T12:00:00.000000"
+}

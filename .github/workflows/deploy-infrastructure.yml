@@ -1,0 +1,281 @@
+name: Deploy Infrastructure
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Deployment environment"
+        required: true
+        default: "dev"
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+      image_tag:
+        description: "Docker image tag to deploy (e.g., latest, main-a1b2c3d)"
+        required: false
+        default: "latest"
+        type: string
+      cloud_provider:
+        description: "Cloud provider (aws or azure)"
+        required: true
+        default: "azure"
+        type: choice
+        options:
+          - aws
+          - azure
+      action:
+        description: "Terraform action"
+        required: true
+        default: "plan"
+        type: choice
+        options:
+          - plan
+          - apply
+          - destroy
+  push:
+    branches:
+      - main
+    paths:
+      - "infra/terraform/**"
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
+env:
+  # AzureRM provider (OIDC / Workload Identity Federation)
+  ARM_USE_OIDC: "true"
+  ARM_CLIENT_ID: "${{ secrets.AZURE_CLIENT_ID }}"
+  ARM_SUBSCRIPTION_ID: "${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+  ARM_TENANT_ID: "${{ secrets.AZURE_TENANT_ID }}"
+  # AWS credentials (if deploying to AWS)
+  AWS_REGION: "${{ secrets.AWS_REGION || 'us-east-1' }}"
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+      pull-requests: write
+
+    defaults:
+      run:
+        working-directory: infra/terraform
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate Required Secrets
+        run: |
+          ENVIRONMENT="${{ github.event.inputs.environment || 'dev' }}"
+          CLOUD_PROVIDER="${{ github.event.inputs.cloud_provider || 'azure' }}"
+
+          if [ -z "${{ secrets.API_KEYS }}" ]; then
+            echo "ERROR: API_KEYS secret is required"
+            exit 1
+          fi
+
+          if [ "$CLOUD_PROVIDER" = "azure" ]; then
+            if [ -z "${{ secrets.AZURE_CLIENT_ID }}" ] || \
+               [ -z "${{ secrets.AZURE_SUBSCRIPTION_ID }}" ] || \
+               [ -z "${{ secrets.AZURE_TENANT_ID }}" ] || \
+               [ -z "${{ secrets.TFSTATE_RESOURCE_GROUP }}" ] || \
+               [ -z "${{ secrets.TFSTATE_STORAGE_ACCOUNT }}" ] || \
+               [ -z "${{ secrets.TFSTATE_CONTAINER_NAME }}" ]; then
+              echo "ERROR: Missing required Azure secrets"
+              echo "Required: AZURE_CLIENT_ID, AZURE_SUBSCRIPTION_ID, AZURE_TENANT_ID"
+              echo "Required: TFSTATE_RESOURCE_GROUP, TFSTATE_STORAGE_ACCOUNT, TFSTATE_CONTAINER_NAME"
+              exit 1
+            fi
+          fi
+
+          if [ "$CLOUD_PROVIDER" = "aws" ]; then
+            if [ -z "${{ secrets.AWS_ROLE_ARN }}" ]; then
+              echo "ERROR: AWS_ROLE_ARN secret is required for AWS deployments"
+              exit 1
+            fi
+            if [ -z "${{ secrets.TFSTATE_RESOURCE_GROUP }}" ] || \
+               [ -z "${{ secrets.TFSTATE_STORAGE_ACCOUNT }}" ] || \
+               [ -z "${{ secrets.TFSTATE_CONTAINER_NAME }}" ]; then
+              echo "ERROR: Terraform backend secrets are required"
+              echo "Required: TFSTATE_RESOURCE_GROUP, TFSTATE_STORAGE_ACCOUNT, TFSTATE_CONTAINER_NAME"
+              exit 1
+            fi
+          fi
+
+          echo "✓ All required secrets are configured"
+
+      - name: Configure AWS Credentials
+        if: ${{ github.event.inputs.cloud_provider == 'aws' }}
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.7.5
+          terraform_wrapper: false
+
+      - name: Configure Backend
+        run: |
+          cat > backend.hcl << EOF
+          resource_group_name  = "${{ secrets.TFSTATE_RESOURCE_GROUP }}"
+          storage_account_name = "${{ secrets.TFSTATE_STORAGE_ACCOUNT }}"
+          container_name       = "${{ secrets.TFSTATE_CONTAINER_NAME }}"
+          key                  = "${{ github.event.inputs.environment || 'dev' }}/lead-scoring.tfstate"
+          EOF
+
+      - name: Terraform Init
+        run: terraform init -backend-config=backend.hcl
+
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive
+        continue-on-error: true
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Determine Docker Image
+        id: docker-image
+        run: |
+          CLOUD_PROVIDER="${{ github.event.inputs.cloud_provider || 'azure' }}"
+          TAG="${{ github.event.inputs.image_tag || 'latest' }}"
+
+          if [ "$CLOUD_PROVIDER" = "aws" ]; then
+            if [ -n "${{ secrets.ECR_REGISTRY }}" ] && [ -n "${{ secrets.ECR_REPOSITORY }}" ]; then
+              IMAGE="${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_REPOSITORY }}:$TAG"
+            elif [ -n "${{ secrets.DOCKER_IMAGE }}" ]; then
+              IMAGE="${{ secrets.DOCKER_IMAGE }}"
+            else
+              IMAGE="ghcr.io/${{ github.repository }}:$TAG"
+            fi
+          else
+            if [ -n "${{ secrets.ACR_LOGIN_SERVER }}" ]; then
+              IMAGE="${{ secrets.ACR_LOGIN_SERVER }}/lead-scoring:$TAG"
+            elif [ -n "${{ secrets.DOCKER_IMAGE }}" ]; then
+              IMAGE="${{ secrets.DOCKER_IMAGE }}"
+            else
+              IMAGE="ghcr.io/${{ github.repository }}:$TAG"
+            fi
+          fi
+
+          echo "Using Docker image: $IMAGE"
+          echo "image=$IMAGE" >> $GITHUB_OUTPUT
+
+      - name: Terraform Plan
+        id: tf-plan
+        run: |
+          exitcode=0
+          CLOUD_PROVIDER="${{ github.event.inputs.cloud_provider || 'azure' }}"
+          EXTRA_ARGS=""
+
+          if [ "$CLOUD_PROVIDER" = "aws" ]; then
+            EXTRA_ARGS="-var=\"aws_region=${{ env.AWS_REGION }}\""
+          else
+            EXTRA_ARGS="-var=\"azure_location=${{ secrets.AZURE_LOCATION || 'East US' }}\""
+          fi
+
+          terraform plan -detailed-exitcode -no-color -out=tfplan \
+            -var="environment=${{ github.event.inputs.environment || 'dev' }}" \
+            -var="cloud_provider=$CLOUD_PROVIDER" \
+            -var="docker_image=${{ steps.docker-image.outputs.image }}" \
+            -var="api_keys=${{ secrets.API_KEYS }}" \
+            -var="project_name=${{ vars.PROJECT_NAME || 'lead-scoring' }}" \
+            $EXTRA_ARGS || exitcode=$?
+
+          echo "exitcode=$exitcode" >> $GITHUB_OUTPUT
+
+          if [ $exitcode -eq 1 ]; then
+            echo "Terraform Plan Failed!"
+            exit 1
+          else
+            exit 0
+          fi
+
+      - name: Publish Terraform Plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan-${{ github.event.inputs.environment || 'dev' }}
+          path: tfplan
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Create Plan Summary
+        uses: actions/github-script@v7
+        if: github.event_name == 'pull_request'
+        with:
+          script: |
+            const output = `#### Terraform Plan 📖\`${{ steps.tf-plan.outputs.exitcode }}\`
+
+            <details><summary>Show Plan</summary>
+
+            \`\`\`terraform
+            ${{ steps.tf-plan.outputs.stdout }}
+            \`\`\`
+
+            </details>
+
+            *Environment: ${{ github.event.inputs.environment || 'dev' }}*`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            })
+
+      - name: Terraform Apply
+        if: ${{ github.event.inputs.action == 'apply' }} || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+        run: terraform apply -auto-approve tfplan
+
+      - name: Terraform Outputs
+        if: ${{ github.event.inputs.action == 'apply' }} || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+        id: outputs
+        run: |
+          echo "api_url=$(terraform output -raw api_url)" >> $GITHUB_OUTPUT
+          echo "cloud_provider=$(terraform output -raw deployed_cloud_provider)" >> $GITHUB_OUTPUT
+
+      - name: Comment Outputs
+        if: (${{ github.event.inputs.action == 'apply' }} || (github.event_name == 'push' && github.ref == 'refs/heads/main'))) && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const output = `#### Terraform Apply Complete ✅
+
+            **API URL:** ${{ steps.outputs.outputs.api_url }}
+            **Cloud Provider:** ${{ steps.outputs.outputs.cloud_provider }}
+            **Environment:** ${{ github.event.inputs.environment || 'dev' }}`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            })
+
+      - name: Terraform Destroy
+        if: ${{ github.event.inputs.action == 'destroy' }}
+        run: |
+          CLOUD_PROVIDER="${{ github.event.inputs.cloud_provider || 'azure' }}"
+          EXTRA_ARGS=""
+
+          if [ "$CLOUD_PROVIDER" = "aws" ]; then
+            EXTRA_ARGS="-var=\"aws_region=${{ env.AWS_REGION }}\""
+          else
+            EXTRA_ARGS="-var=\"azure_location=${{ secrets.AZURE_LOCATION || 'East US' }}\""
+          fi
+
+          terraform destroy -auto-approve \
+            -var="environment=${{ github.event.inputs.environment || 'dev' }}" \
+            -var="cloud_provider=$CLOUD_PROVIDER" \
+            -var="docker_image=${{ steps.docker-image.outputs.image }}" \
+            -var="api_keys=${{ secrets.API_KEYS }}" \
+            -var="project_name=${{ vars.PROJECT_NAME || 'lead-scoring' }}" \
+            $EXTRA_ARGS
