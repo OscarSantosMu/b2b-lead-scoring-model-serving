@@ -27,6 +27,12 @@ provider "azurerm" {
 
 provider "aws" {
   region = var.aws_region
+
+  # Skip validation when not deploying to AWS to avoid credential errors
+  skip_credentials_validation = var.cloud_provider != "aws"
+  skip_requesting_account_id  = var.cloud_provider != "aws"
+  skip_metadata_api_check     = var.cloud_provider != "aws"
+  skip_region_validation      = var.cloud_provider != "aws"
 }
 
 # Data sources
