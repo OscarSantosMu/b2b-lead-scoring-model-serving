@@ -87,6 +87,8 @@ data/
 coverage.xml
 bandit-report.json
 loadtest-report.html
+safety-report.json
+security-reports.zip
 
 # OS
 Thumbs.db

@@ -148,6 +148,8 @@ jobs:
         run: |
           echo "GHCR image:"
           echo "${{ env.REGISTRY_GHCR }}/${{ env.IMAGE_NAME }}:latest"
+          echo "Extra metadata from image:"
+          echo "${{ steps.meta.outputs.tags }}"
   
   publish-ecr:
     name: Build & Push to ECR
@@ -211,6 +213,8 @@ jobs:
         run: |
           echo "ECR image:"
           echo "${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_REPOSITORY }}:latest"
+          echo "Extra metadata from image:"
+          echo "${{ steps.meta.outputs.tags }}"
           
       - name: Set ECR image output
         id: ecr-image
@@ -275,6 +279,8 @@ jobs:
         run: |
           echo "ACR image:"
           echo "${{ secrets.ACR_LOGIN_SERVER }}/lead-scoring:latest"
+          echo "Extra metadata from image:"
+          echo "${{ steps.meta.outputs.tags }}"
           
       - name: Set ACR image output
         id: acr-image
@@ -290,12 +296,26 @@ jobs:
     permissions:
       id-token: write
       contents: read
+      actions: write # Required to trigger workflow_dispatch
     steps:
+      - name: Determine Image Tag
+        id: get-tag
+        run: |
+          # Calculate short SHA (7 chars) to match docker/metadata-action default
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          BRANCH_NAME=${GITHUB_REF#refs/heads/}
+          # Sanitize branch name (replace non-alphanumeric with -)
+          SAFE_BRANCH_NAME=$(echo "$BRANCH_NAME" | sed 's/[^a-zA-Z0-9]/-/g')
+          
+          TAG="${SAFE_BRANCH_NAME}-${SHORT_SHA}"
+          echo "Calculated tag: $TAG"
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
       - name: Trigger Infrastructure Deployment
         run: |
           echo "To enable automatic deployment, uncomment the deployment workflow dispatch below"
-          echo "This will trigger the deploy-infrastructure workflow with the newly built images"
-          
+          echo "This will trigger the deploy-infrastructure workflow with tag: ${{ steps.get-tag.outputs.tag }}"
+      
       # Uncomment to enable automatic deployment to dev environment
       # - name: Trigger Deploy Workflow
       #   uses: actions/github-script@v7
@@ -309,6 +329,7 @@ jobs:
       #         inputs: {
       #           environment: 'dev',
       #           cloud_provider: '${{ secrets.CLOUD_PROVIDER || 'azure' }}',
+      #           image_tag: '${{ steps.get-tag.outputs.tag }}',
       #           action: 'apply'
       #         }
       #       })
