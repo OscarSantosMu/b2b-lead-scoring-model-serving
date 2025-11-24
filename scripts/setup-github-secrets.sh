@@ -97,6 +97,7 @@ if [ "$CLOUD_CHOICE" = "1" ] || [ "$CLOUD_CHOICE" = "3" ]; then
     read -rp "AZURE_CLIENT_ID: " AZURE_CLIENT_ID
     read -rp "AZURE_SUBSCRIPTION_ID: " AZURE_SUBSCRIPTION_ID
     read -rp "AZURE_TENANT_ID: " AZURE_TENANT_ID
+    read -rp "AZURE_LOCATION (e.g., eastus, westus2): " AZURE_LOCATION
     
     if [ -n "$AZURE_CLIENT_ID" ]; then
         gh secret set AZURE_CLIENT_ID --body "$AZURE_CLIENT_ID" --repo "$REPO"
@@ -111,6 +112,11 @@ if [ "$CLOUD_CHOICE" = "1" ] || [ "$CLOUD_CHOICE" = "3" ]; then
     if [ -n "$AZURE_TENANT_ID" ]; then
         gh secret set AZURE_TENANT_ID --body "$AZURE_TENANT_ID" --repo "$REPO"
         print_success "Set AZURE_TENANT_ID"
+    fi
+    
+    if [ -n "$AZURE_LOCATION" ]; then
+        gh secret set AZURE_LOCATION --body "$AZURE_LOCATION" --repo "$REPO"
+        print_success "Set AZURE_LOCATION"
     fi
     
     echo ""
