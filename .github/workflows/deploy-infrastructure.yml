@@ -208,11 +208,14 @@ jobs:
             exit 0
           fi
 
+      - name: List files after plan
+        run: ls -lah
+
       - name: Publish Terraform Plan
         uses: actions/upload-artifact@v4
         with:
           name: tfplan-${{ github.event.inputs.environment || 'dev' }}
-          path: tfplan
+          path: infra/terraform/tfplan
           if-no-files-found: error
           retention-days: 7
 
