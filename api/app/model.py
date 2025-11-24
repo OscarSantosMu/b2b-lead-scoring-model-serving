@@ -72,9 +72,7 @@ class LeadScoringModel:
         self.model_metadata = {}
 
         # Determine mode: local or endpoint
-        self.endpoint_provider = endpoint_provider or os.getenv(
-            "MODEL_ENDPOINT_PROVIDER", "local"
-        )
+        self.endpoint_provider = endpoint_provider or os.getenv("MODEL_ENDPOINT_PROVIDER", "local")
         self.endpoint_client: EndpointClient | None = None
 
         if self.endpoint_provider.lower() != "local":
@@ -203,9 +201,7 @@ class LeadScoringModel:
                 np.random.binomial(1, 0.5, n_samples),  # competitor_evaluation
                 np.random.binomial(1, 0.35, n_samples),  # technical_evaluation_started
                 np.random.binomial(1, 0.15, n_samples),  # contract_reviewed
-                np.random.binomial(
-                    1, 0.2, n_samples
-                ),  # security_questionnaire_completed
+                np.random.binomial(1, 0.2, n_samples),  # security_questionnaire_completed
                 np.random.binomial(1, 0.3, n_samples),  # roi_calculator_used
                 np.random.binomial(1, 0.25, n_samples),  # custom_demo_requested
                 np.random.poisson(2, n_samples),  # integration_questions_asked
@@ -328,9 +324,7 @@ class LeadScoringModel:
         if metadata_path.exists():
             with open(metadata_path) as f:
                 self.model_metadata = json.load(f)
-                self.model_version = self.model_metadata.get(
-                    "version", self.model_version
-                )
+                self.model_version = self.model_metadata.get("version", self.model_version)
 
         logger.info(f"Model loaded successfully, version: {self.model_version}")
 
@@ -398,13 +392,9 @@ class LeadScoringModel:
                 tier = "cold"
 
             # Record detailed metrics
-            PREDICTION_COUNTER.labels(
-                endpoint_provider=endpoint_provider, tier=tier
-            ).inc()
+            PREDICTION_COUNTER.labels(endpoint_provider=endpoint_provider, tier=tier).inc()
 
-            PREDICTION_SCORE_HISTOGRAM.labels(
-                endpoint_provider=endpoint_provider
-            ).observe(score)
+            PREDICTION_SCORE_HISTOGRAM.labels(endpoint_provider=endpoint_provider).observe(score)
 
             PREDICTION_CONFIDENCE_HISTOGRAM.labels(
                 endpoint_provider=endpoint_provider, tier=tier
@@ -444,13 +434,9 @@ class LeadScoringModel:
         finally:
             # Record latency
             latency = time.time() - start_time
-            PREDICTION_LATENCY.labels(endpoint_provider=endpoint_provider).observe(
-                latency
-            )
+            PREDICTION_LATENCY.labels(endpoint_provider=endpoint_provider).observe(latency)
 
-    def predict_batch(
-        self, features_list: list[dict]
-    ) -> list[tuple[float, float, str]]:
+    def predict_batch(self, features_list: list[dict]) -> list[tuple[float, float, str]]:
         """Make predictions for multiple leads."""
         # Record batch size
         BATCH_SIZE_HISTOGRAM.observe(len(features_list))

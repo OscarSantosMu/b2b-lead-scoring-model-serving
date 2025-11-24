@@ -8,10 +8,10 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from api.middleware.metrics import MetricsMiddleware
 from fastapi.responses import JSONResponse
 
 from api.middleware.logging_middleware import RequestLoggingMiddleware, setup_logging
+from api.middleware.metrics import MetricsMiddleware
 from api.routes import health, scoring
 
 # Setup logging

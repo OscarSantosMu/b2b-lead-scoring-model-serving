@@ -45,9 +45,7 @@ HTTP_ERRORS_TOTAL = Counter(
 # System Resource Metrics
 CPU_USAGE_PERCENT = Gauge("system_cpu_usage_percent", "Current CPU usage percentage")
 
-MEMORY_USAGE_PERCENT = Gauge(
-    "system_memory_usage_percent", "Current memory usage percentage"
-)
+MEMORY_USAGE_PERCENT = Gauge("system_memory_usage_percent", "Current memory usage percentage")
 
 MEMORY_USAGE_BYTES = Gauge("system_memory_usage_bytes", "Current memory usage in bytes")
 
@@ -58,9 +56,7 @@ ACTIVE_REQUESTS = Gauge("http_requests_active", "Number of active HTTP requests"
 # Process Metrics
 PROCESS_CPU_PERCENT = Gauge("process_cpu_usage_percent", "Process CPU usage percentage")
 
-PROCESS_MEMORY_BYTES = Gauge(
-    "process_memory_usage_bytes", "Process memory usage in bytes"
-)
+PROCESS_MEMORY_BYTES = Gauge("process_memory_usage_bytes", "Process memory usage in bytes")
 
 PROCESS_THREADS = Gauge("process_threads_count", "Number of threads in the process")
 
@@ -103,9 +99,7 @@ class MetricsMiddleware(BaseHTTPMiddleware):
         # Measure request size
         request_size = int(request.headers.get("content-length", 0))
         if request_size > 0:
-            HTTP_REQUEST_SIZE.labels(method=method, endpoint=endpoint).observe(
-                request_size
-            )
+            HTTP_REQUEST_SIZE.labels(method=method, endpoint=endpoint).observe(request_size)
 
         # Start timing
         start_time = time.time()
@@ -119,20 +113,14 @@ class MetricsMiddleware(BaseHTTPMiddleware):
 
             # Record metrics
             status = str(response.status_code)
-            HTTP_REQUESTS_TOTAL.labels(
-                method=method, endpoint=endpoint, status=status
-            ).inc()
+            HTTP_REQUESTS_TOTAL.labels(method=method, endpoint=endpoint, status=status).inc()
 
-            HTTP_REQUEST_DURATION.labels(method=method, endpoint=endpoint).observe(
-                duration
-            )
+            HTTP_REQUEST_DURATION.labels(method=method, endpoint=endpoint).observe(duration)
 
             # Measure response size
             if hasattr(response, "body"):
                 response_size = len(response.body)
-                HTTP_RESPONSE_SIZE.labels(method=method, endpoint=endpoint).observe(
-                    response_size
-                )
+                HTTP_RESPONSE_SIZE.labels(method=method, endpoint=endpoint).observe(response_size)
 
             # Log performance metrics
             if duration > 1.0:  # Log slow requests
@@ -158,9 +146,7 @@ class MetricsMiddleware(BaseHTTPMiddleware):
             status = "500"
             exception_type = type(e).__name__
 
-            HTTP_REQUESTS_TOTAL.labels(
-                method=method, endpoint=endpoint, status=status
-            ).inc()
+            HTTP_REQUESTS_TOTAL.labels(method=method, endpoint=endpoint, status=status).inc()
 
             HTTP_ERRORS_TOTAL.labels(
                 method=method,
@@ -169,9 +155,7 @@ class MetricsMiddleware(BaseHTTPMiddleware):
                 exception_type=exception_type,
             ).inc()
 
-            HTTP_REQUEST_DURATION.labels(method=method, endpoint=endpoint).observe(
-                duration
-            )
+            HTTP_REQUEST_DURATION.labels(method=method, endpoint=endpoint).observe(duration)
 
             logger.error(
                 "Request error",

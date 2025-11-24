@@ -156,9 +156,7 @@ async def resource_check():
             "cpu": {
                 "usage_percent": round(cpu_percent, 2),
                 "count": cpu_count,
-                "per_cpu": [
-                    round(p, 2) for p in psutil.cpu_percent(interval=0.1, percpu=True)
-                ],
+                "per_cpu": [round(p, 2) for p in psutil.cpu_percent(interval=0.1, percpu=True)],
             },
             "memory": {
                 "total_mb": round(memory.total / 1024 / 1024, 2),
