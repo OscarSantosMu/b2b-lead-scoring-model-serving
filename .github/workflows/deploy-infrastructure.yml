@@ -174,10 +174,15 @@ jobs:
           else
             if [ -n "${{ secrets.ACR_LOGIN_SERVER }}" ]; then
               IMAGE="${{ secrets.ACR_LOGIN_SERVER }}/lead-scoring:$TAG"
-            elif [ -n "${{ secrets.DOCKER_IMAGE }}" ]; then
-              IMAGE="${{ secrets.DOCKER_IMAGE }}"
             else
-              IMAGE="ghcr.io/${{ github.repository }}:$TAG"
+              # Fallback: Construct ACR Login Server from naming convention
+              PROJECT_NAME="${{ vars.PROJECT_NAME || 'lead-scoring' }}"
+              ENVIRONMENT="${{ github.event.inputs.environment || 'dev' }}"
+              # Remove hyphens
+              ACR_NAME=$(echo "${PROJECT_NAME}${ENVIRONMENT}acr" | sed 's/-//g')
+              ACR_LOGIN_SERVER="${ACR_NAME}.azurecr.io"
+              echo "Constructed ACR Login Server: $ACR_LOGIN_SERVER"
+              IMAGE="${ACR_LOGIN_SERVER}/lead-scoring:$TAG"
             fi
           fi
 

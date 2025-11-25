@@ -113,6 +113,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
         with:
           driver: docker-container
+          install: true
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -179,6 +180,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
         with:
           driver: docker-container
+          install: true
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -229,40 +231,51 @@ jobs:
     name: Build & Push to ACR
     runs-on: ubuntu-latest
     needs: build-ghcr
-    env:
-      ACR_LOGIN_SERVER: ${{ secrets.ACR_LOGIN_SERVER }}
-      ACR_USERNAME:     ${{ secrets.ACR_USERNAME }}
-      ACR_PASSWORD:     ${{ secrets.ACR_PASSWORD }}
-    if: ${{ github.event_name != 'pull_request' }}
     permissions:
       contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check required secrets
-        if: ${{ env.ACR_LOGIN_SERVER == '' || env.ACR_USERNAME == '' || env.ACR_PASSWORD == '' }}
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Determine ACR Details
+        id: acr
         run: |
-          echo "Skipping ACR publish: missing required secret(s)"
-          exit 0
+          if [ -n "${{ secrets.ACR_LOGIN_SERVER }}" ]; then
+            LOGIN_SERVER="${{ secrets.ACR_LOGIN_SERVER }}"
+          else
+            # Fallback to convention: project+env+acr
+            PROJECT_NAME="lead-scoring"
+            ENVIRONMENT="dev"
+            ACR_NAME=$(echo "${PROJECT_NAME}${ENVIRONMENT}acr" | sed 's/-//g')
+            LOGIN_SERVER="${ACR_NAME}.azurecr.io"
+          fi
+          echo "login_server=$LOGIN_SERVER" >> $GITHUB_OUTPUT
+          # Extract name from login server (assuming standard format)
+          NAME=$(echo "$LOGIN_SERVER" | cut -d. -f1)
+          echo "name=$NAME" >> $GITHUB_OUTPUT
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
           driver: docker-container
+          install: true
 
-      - name: Login to Azure Container Registry
-        uses: azure/docker-login@v1
-        with:
-          login-server: ${{ secrets.ACR_LOGIN_SERVER }}
-          username: ${{ secrets.ACR_USERNAME }}
-          password: ${{ secrets.ACR_PASSWORD }}
+      - name: Login to ACR
+        run: az acr login --name ${{ steps.acr.outputs.name }}
 
       - name: Extract metadata (ACR)
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: |
-            ${{ secrets.ACR_LOGIN_SERVER }}/lead-scoring
+            ${{ steps.acr.outputs.login_server }}/lead-scoring
           tags: |
             type=ref,event=branch
             type=ref,event=pr
@@ -283,15 +296,15 @@ jobs:
 
       - name: Output ACR image info
         run: |
-          echo "ACR image:"
-          echo "${{ secrets.ACR_LOGIN_SERVER }}/lead-scoring:latest"
-          echo "Extra metadata from image:"
-          echo "${{ steps.meta.outputs.tags }}"
-          
+          echo "ACR image: ${{ steps.acr.outputs.login_server }}/lead-scoring:${{ steps.meta.outputs.tags }}"
+
       - name: Set ACR image output
-        id: acr-image
+        id: set-acr-image
         run: |
-          echo "image=${{ secrets.ACR_LOGIN_SERVER }}/lead-scoring:latest" >> $GITHUB_OUTPUT
+          echo "image=${{ steps.acr.outputs.login_server }}/lead-scoring:${{ steps.meta.outputs.tags }}" >> $GITHUB_OUTPUT
+
+    outputs:
+      acr_image: ${{ steps.set-acr-image.outputs.image }}
 
   # Optional: Auto-deploy to dev environment after successful image builds
   deploy-dev:
@@ -319,23 +332,21 @@ jobs:
 
       - name: Trigger Infrastructure Deployment
         run: |
-          echo "To enable automatic deployment, uncomment the deployment workflow dispatch below"
-          echo "This will trigger the deploy-infrastructure workflow with tag: ${{ steps.get-tag.outputs.tag }}"
+          echo "Triggering deploy-infrastructure workflow with tag: ${{ steps.get-tag.outputs.tag }}"
       
-      # Uncomment to enable automatic deployment to dev environment
-      # - name: Trigger Deploy Workflow
-      #   uses: actions/github-script@v7
-      #   with:
-      #     script: |
-      #       await github.rest.actions.createWorkflowDispatch({
-      #         owner: context.repo.owner,
-      #         repo: context.repo.repo,
-      #         workflow_id: 'deploy-infrastructure.yml',
-      #         ref: 'main',
-      #         inputs: {
-      #           environment: 'dev',
-      #           cloud_provider: '${{ secrets.CLOUD_PROVIDER || 'azure' }}',
-      #           image_tag: '${{ steps.get-tag.outputs.tag }}',
-      #           action: 'apply'
-      #         }
-      #       })
+      - name: Trigger Deploy Workflow
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'deploy-infrastructure.yml',
+              ref: 'main',
+              inputs: {
+                environment: 'dev',
+                cloud_provider: '${{ secrets.CLOUD_PROVIDER || 'azure' }}',
+                image_tag: '${{ steps.get-tag.outputs.tag }}',
+                action: 'apply'
+              }
+            })

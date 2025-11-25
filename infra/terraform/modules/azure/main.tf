@@ -121,7 +121,7 @@ resource "azurerm_container_app" "main" {
 
     container {
       name   = "api"
-      image  = "${lower(azurerm_container_registry.main.login_server)}/${var.project_name}:${var.image_tag}"
+      image  = lower(var.docker_image)
       cpu    = 0.5
       memory = "1Gi"
 
