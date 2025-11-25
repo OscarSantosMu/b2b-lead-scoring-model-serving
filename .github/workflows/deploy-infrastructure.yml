@@ -174,10 +174,15 @@ jobs:
           else
             if [ -n "${{ secrets.ACR_LOGIN_SERVER }}" ]; then
               IMAGE="${{ secrets.ACR_LOGIN_SERVER }}/lead-scoring:$TAG"
-            elif [ -n "${{ secrets.DOCKER_IMAGE }}" ]; then
-              IMAGE="${{ secrets.DOCKER_IMAGE }}"
             else
-              IMAGE="ghcr.io/${{ github.repository }}:$TAG"
+              # Fallback: Construct ACR Login Server from naming convention
+              PROJECT_NAME="${{ vars.PROJECT_NAME || 'lead-scoring' }}"
+              ENVIRONMENT="${{ github.event.inputs.environment || 'dev' }}"
+              # Remove hyphens
+              ACR_NAME=$(echo "${PROJECT_NAME}${ENVIRONMENT}acr" | sed 's/-//g')
+              ACR_LOGIN_SERVER="${ACR_NAME}.azurecr.io"
+              echo "Constructed ACR Login Server: $ACR_LOGIN_SERVER"
+              IMAGE="${ACR_LOGIN_SERVER}/lead-scoring:$TAG"
             fi
           fi
 
@@ -224,29 +229,46 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-      - name: Create Plan Summary
-        uses: actions/github-script@v7
-        if: github.event_name == 'pull_request'
+      # Create string output of Terraform Plan
+      - name: Create String Output
+        id: tf-plan-string
+        run: |
+          TERRAFORM_PLAN=$(terraform show -no-color tfplan)
+          
+          delimiter="$(openssl rand -hex 8)"
+          echo "summary<<${delimiter}" >> $GITHUB_OUTPUT
+          echo "## Terraform Plan Output" >> $GITHUB_OUTPUT
+          echo "<details><summary>Click to expand</summary>" >> $GITHUB_OUTPUT
+          echo "" >> $GITHUB_OUTPUT
+          echo '```terraform' >> $GITHUB_OUTPUT
+          echo "$TERRAFORM_PLAN" >> $GITHUB_OUTPUT
+          echo '```' >> $GITHUB_OUTPUT
+          echo "</details>" >> $GITHUB_OUTPUT
+          echo "${delimiter}" >> $GITHUB_OUTPUT
+          
+      # Publish Terraform Plan as task summary
+      - name: Publish Terraform Plan to Task Summary
+        env:
+          SUMMARY: ${{ steps.tf-plan-string.outputs.summary }}
+        run: |
+          echo "$SUMMARY" >> $GITHUB_STEP_SUMMARY
+        
+      # If this is a PR post the changes
+      - name: Push Terraform Output to PR
+        if: ${{ github.event_name == 'pull_request' }}
+        uses: actions/github-script@v6
+        env:
+          SUMMARY: "${{ steps.tf-plan-string.outputs.summary }}"
         with:
-          script: |
-            const output = `#### Terraform Plan 📖\`${{ steps.tf-plan.outputs.exitcode }}\`
-
-            <details><summary>Show Plan</summary>
-
-            \`\`\`terraform
-            ${{ steps.tf-plan.outputs.stdout }}
-            \`\`\`
-
-            </details>
-
-            *Environment: ${{ github.event.inputs.environment || 'dev' }}*`;
-
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: output
-            })
+            github-token: ${{ secrets.GITHUB_TOKEN }}
+            script: |
+              const body = `${process.env.SUMMARY}`;
+              github.rest.issues.createComment({
+                  issue_number: context.issue.number,
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  body: body
+              })
 
       - name: Terraform Apply
         if: ${{ github.event.inputs.action == 'apply' || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}

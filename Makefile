@@ -56,9 +56,16 @@ docker-build:
 
 docker-run:
 	docker run -p 8000:8000 \
-		-e JWT_SECRET_KEY=demo-secret \
 		-e API_KEYS=demo-api-key-123 \
+		-e HOST=http://127.0.0.1 \
 		lead-scoring-api:latest
+
+docker-run-from-public-registry:
+	docker run -p 8000:8000 \
+		-e HOST=http://127.0.0.1 \
+		-e PORT=8000 \
+		-e API_KEYS=demo-api-key-123 \
+		ghcr.io/oscarsantosmu/b2b-lead-scoring-model-serving:latest
 
 docker-compose-up:
 	docker-compose up -d
