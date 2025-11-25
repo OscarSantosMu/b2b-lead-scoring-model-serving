@@ -105,7 +105,7 @@ resource "azurerm_container_app" "main" {
   }
 
   registry {
-    server               = azurerm_container_registry.main.login_server
+    server               = lower(azurerm_container_registry.main.login_server)
     username             = azurerm_container_registry.main.admin_username
     password_secret_name = "registry-password"
   }
@@ -121,7 +121,7 @@ resource "azurerm_container_app" "main" {
 
     container {
       name   = "api"
-      image  = var.docker_image
+      image  = "${lower(azurerm_container_registry.main.login_server)}/${var.project_name}:${var.image_tag}"
       cpu    = 0.5
       memory = "1Gi"
 
