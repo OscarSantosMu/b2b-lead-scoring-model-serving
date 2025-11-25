@@ -294,17 +294,25 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Output ACR image info
+      - name: Choose ACR image tag with branch+sha pattern
+        id: choose-acr-image
         run: |
-          echo "ACR image: ${{ steps.acr.outputs.login_server }}/lead-scoring:${{ steps.meta.outputs.tags }}"
+          echo "All tags:"
+          echo '${{ steps.meta.outputs.tags }}'
 
-      - name: Set ACR image output
-        id: set-acr-image
-        run: |
-          echo "image=${{ steps.acr.outputs.login_server }}/lead-scoring:${{ steps.meta.outputs.tags }}" >> $GITHUB_OUTPUT
+          # Extract tag that contains branch-SHORTSHA format (e.g., develop-0956282)
+          HASH_TAG=$(echo '${{ steps.meta.outputs.tags }}' | grep -E '[a-zA-Z0-9]+-[a-f0-9]{7}$' | head -n 1)
+
+          if [ -z "$HASH_TAG" ]; then
+            echo "⚠️ No branch-SHA tag found. Falling back to first tag."
+            HASH_TAG=$(echo '${{ steps.meta.outputs.tags }}' | head -n 1)
+          fi
+
+          echo "Selected image: $HASH_TAG"
+          echo "image=$HASH_TAG" >> $GITHUB_OUTPUT
 
     outputs:
-      acr_image: ${{ steps.set-acr-image.outputs.image }}
+      acr_image: ${{ steps.choose-acr-image.outputs.image }}
 
   # Optional: Auto-deploy to dev environment after successful image builds
   deploy-dev:
