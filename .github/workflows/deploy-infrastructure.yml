@@ -34,11 +34,6 @@ on:
           - plan
           - apply
           - destroy
-  push:
-    branches:
-      - main
-    paths:
-      - "infra/terraform/**"
   pull_request:
     branches:
       - main
