@@ -65,6 +65,11 @@ resource "azurerm_container_app_environment" "main" {
   # Add this line to control the name of the managed RG
   infrastructure_resource_group_name = "${var.project_name}-${var.environment}-infra-rg"
 
+  workload_profile {
+    name                  = "Consumption"
+    workload_profile_type = "Consumption"
+  }
+
   tags = var.tags
 }
 
