@@ -87,6 +87,18 @@ jobs:
       - name: Install dependencies
         run: uv pip install --system -e ".[dev]"
       
+      - name: Load Test Configuration
+        id: config
+        run: |
+          CONFIG_FILE="infra/config/environments.json"
+          if [ -f "$CONFIG_FILE" ]; then
+            # Use 'dev' config for CI tests
+            LOG_LEVEL=$(jq -r '.dev.log_level // "INFO"' $CONFIG_FILE)
+            echo "LOG_LEVEL=$LOG_LEVEL" >> $GITHUB_ENV
+          else
+            echo "LOG_LEVEL=INFO" >> $GITHUB_ENV
+          fi
+
       - name: Run unit tests
         run: |
           uv run pytest tests/unit/ -v --cov=api --cov-report=xml --cov-report=html
@@ -265,8 +277,8 @@ jobs:
             LOGIN_SERVER="${{ secrets.ACR_LOGIN_SERVER }}"
           else
             # Fallback to convention: project+env+acr
-            PROJECT_NAME="lead-scoring"
-            ENVIRONMENT="dev"
+            PROJECT_NAME="${{ vars.PROJECT_NAME || 'lead-scoring' }}"
+            ENVIRONMENT="${{ github.ref == 'refs/heads/main' && 'prod' || 'dev' }}"
             ACR_NAME=$(echo "${PROJECT_NAME}${ENVIRONMENT}acr" | sed 's/-//g')
             LOGIN_SERVER="${ACR_NAME}.azurecr.io"
           fi
@@ -328,12 +340,12 @@ jobs:
     outputs:
       acr_image: ${{ steps.choose-acr-image.outputs.image }}
 
-  # Optional: Auto-deploy to dev environment after successful image builds
-  deploy-dev:
-    name: Deploy to Dev Environment
+  # Auto-deploy to appropriate environment after successful image builds
+  deploy:
+    name: Deploy to Environment
     runs-on: ubuntu-latest
     needs: [publish-ecr, publish-acr]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: ${{ (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop') && github.event_name == 'push' }}
     permissions:
       id-token: write
       contents: read
@@ -360,15 +372,19 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
+            // Determine environment based on branch
+            const env = context.ref === 'refs/heads/main' ? 'prod' : 'dev';
+            console.log(`Triggering deployment for environment: ${env}`);
+
             await github.rest.actions.createWorkflowDispatch({
               owner: context.repo.owner,
               repo: context.repo.repo,
               workflow_id: 'deploy-infrastructure.yml',
               ref: 'main',
               inputs: {
-                environment: 'dev',
-                cloud_provider: '${{ secrets.CLOUD_PROVIDER || 'azure' }}',
-                image_tag: '${{ steps.get-tag.outputs.tag }}',
+                environment: env,
+                cloud_provider: "${{ secrets.CLOUD_PROVIDER || 'azure' }}",
+                image_tag: "${{ steps.get-tag.outputs.tag }}",
                 action: 'apply'
               }
             })

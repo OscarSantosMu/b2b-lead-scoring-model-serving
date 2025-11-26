@@ -8,21 +8,21 @@ resource "azurerm_resource_group" "main" {
   tags     = var.tags
 }
 
-# Virtual Network
-resource "azurerm_virtual_network" "main" {
-  name                = "${var.project_name}-vnet"
-  location            = azurerm_resource_group.main.location
-  resource_group_name = azurerm_resource_group.main.name
-  address_space       = ["10.0.0.0/16"]
-  tags                = var.tags
-}
+# Virtual Network (Commented out to save costs - VNet injection triggers Standard LB creation)
+# resource "azurerm_virtual_network" "main" {
+#   name                = "${var.project_name}-vnet"
+#   location            = azurerm_resource_group.main.location
+#   resource_group_name = azurerm_resource_group.main.name
+#   address_space       = ["10.0.0.0/16"]
+#   tags                = var.tags
+# }
 
-resource "azurerm_subnet" "container_apps" {
-  name                 = "container-apps-subnet"
-  resource_group_name  = azurerm_resource_group.main.name
-  virtual_network_name = azurerm_virtual_network.main.name
-  address_prefixes     = ["10.0.0.0/23"]
-}
+# resource "azurerm_subnet" "container_apps" {
+#   name                 = "container-apps-subnet"
+#   resource_group_name  = azurerm_resource_group.main.name
+#   virtual_network_name = azurerm_virtual_network.main.name
+#   address_prefixes     = ["10.0.0.0/23"]
+# }
 
 # Log Analytics Workspace
 resource "azurerm_log_analytics_workspace" "main" {
@@ -60,19 +60,21 @@ resource "azurerm_container_app_environment" "main" {
   location                   = azurerm_resource_group.main.location
   resource_group_name        = azurerm_resource_group.main.name
   log_analytics_workspace_id = azurerm_log_analytics_workspace.main.id
-  infrastructure_subnet_id   = azurerm_subnet.container_apps.id
-  tags                       = var.tags
+  # infrastructure_subnet_id   = azurerm_subnet.container_apps.id
+
+  tags = var.tags
 }
 
 # Key Vault for secrets
 resource "azurerm_key_vault" "main" {
+  count = var.enable_azure_ml ? 1 : 0
   name                       = replace("${var.project_name}-${var.environment}-kv", "-", "")
   location                   = azurerm_resource_group.main.location
   resource_group_name        = azurerm_resource_group.main.name
   tenant_id                  = data.azurerm_client_config.current.tenant_id
   sku_name                   = "standard"
-  soft_delete_retention_days = 14   # or 30 for more cushion
-  purge_protection_enabled   = false   # keep it off for now in this single-env test phase
+  soft_delete_retention_days = 14    # or 30 for more cushion
+  purge_protection_enabled   = false # keep it off for now in this single-env test phase
 
   access_policy {
     tenant_id = data.azurerm_client_config.current.tenant_id
@@ -86,12 +88,12 @@ resource "azurerm_key_vault" "main" {
   tags = var.tags
 }
 
-# Store API keys in Key Vault
-resource "azurerm_key_vault_secret" "api_keys" {
-  name         = "api-keys"
-  value        = var.api_keys
-  key_vault_id = azurerm_key_vault.main.id
-}
+# # Store API keys in Key Vault
+# resource "azurerm_key_vault_secret" "api_keys" {
+#   name         = "api-keys"
+#   value        = var.api_keys
+#   key_vault_id = azurerm_key_vault.main.id
+# }
 
 # Container App
 resource "azurerm_container_app" "main" {
@@ -132,7 +134,7 @@ resource "azurerm_container_app" "main" {
 
       env {
         name  = "LOG_LEVEL"
-        value = "INFO"
+        value = var.log_level
       }
 
       env {
@@ -141,8 +143,8 @@ resource "azurerm_container_app" "main" {
       }
 
       env {
-        name        = "API_KEYS"
-        secret_name = "api-keys"
+        name  = "API_KEYS"
+        value = var.api_keys
       }
 
       env {
@@ -204,7 +206,8 @@ resource "azurerm_container_app" "main" {
 
 # Grant Container App access to Key Vault
 resource "azurerm_key_vault_access_policy" "container_app" {
-  key_vault_id = azurerm_key_vault.main.id
+  count = var.enable_azure_ml ? 1 : 0
+  key_vault_id = azurerm_key_vault.main[0].id
   tenant_id    = data.azurerm_client_config.current.tenant_id
   object_id    = azurerm_container_app.main.identity[0].principal_id
 
@@ -232,7 +235,7 @@ resource "azurerm_machine_learning_workspace" "main" {
   resource_group_name     = azurerm_resource_group.main.name
   location                = azurerm_resource_group.main.location
   application_insights_id = azurerm_application_insights.main.id
-  key_vault_id            = azurerm_key_vault.main.id
+  key_vault_id            = azurerm_key_vault.main[0].id
   storage_account_id      = azurerm_storage_account.ml_storage[0].id
 
   identity {

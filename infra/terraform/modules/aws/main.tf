@@ -440,7 +440,7 @@ resource "aws_ecs_task_definition" "main" {
         },
         {
           name  = "LOG_LEVEL"
-          value = "INFO"
+          value = var.log_level
         },
         {
           name  = "MODEL_ENDPOINT_PROVIDER"

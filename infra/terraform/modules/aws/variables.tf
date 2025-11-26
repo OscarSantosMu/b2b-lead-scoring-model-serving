@@ -24,6 +24,11 @@ variable "api_keys" {
   sensitive   = true
 }
 
+variable "log_level" {
+  description = "Logging level"
+  type        = string
+}
+
 variable "min_instances" {
   description = "Minimum instances"
   type        = number
