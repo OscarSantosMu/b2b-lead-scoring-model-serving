@@ -23,12 +23,13 @@ terraform {
 provider "azurerm" {
   features {
     key_vault {
-      # CI/CD apply-destroy-apply-destroy for DEV ENV only
-      # 1) DO NOT purge on destroy → keep soft delete as a safety net
-      purge_soft_delete_on_destroy = false
+      # ❌ DO NOT purge soft-deleted vaults or secrets on destroy
+      purge_soft_delete_on_destroy          = false
+      purge_soft_deleted_secrets_on_destroy = false
 
-      # 2) On next apply, if a soft-deleted KV with same name exists → recover it instead of erroring
+      # ✅ If a soft-deleted KV or secret with same name exists, recover it on apply
       recover_soft_deleted_key_vaults = true
+      recover_soft_deleted_secrets    = true
     }
     resource_group {
       prevent_deletion_if_contains_resources = false
