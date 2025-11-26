@@ -25,6 +25,14 @@ on:
         options:
           - aws
           - azure
+      registry_type:
+        description: "Container registry to use (acr or ghcr)"
+        required: false
+        default: "acr"
+        type: choice
+        options:
+          - acr
+          - ghcr
       action:
         description: "Terraform action"
         required: true
@@ -157,6 +165,7 @@ jobs:
         run: |
           CLOUD_PROVIDER="${{ github.event.inputs.cloud_provider || 'azure' }}"
           TAG="${{ github.event.inputs.image_tag || 'latest' }}"
+          REGISTRY_TYPE="${{ github.event.inputs.registry_type || 'acr' }}"
 
           if [ "$CLOUD_PROVIDER" = "aws" ]; then
             if [ -n "${{ secrets.ECR_REGISTRY }}" ] && [ -n "${{ secrets.ECR_REPOSITORY }}" ]; then
@@ -167,10 +176,18 @@ jobs:
               IMAGE="ghcr.io/${{ github.repository }}:$TAG"
             fi
           else
-            if [ -n "${{ secrets.ACR_LOGIN_SERVER }}" ]; then
-              IMAGE="${{ secrets.ACR_LOGIN_SERVER }}/${{ vars.PROJECT_NAME || 'lead-scoring' }}:$TAG"
-            else
+            # Azure Logic
+            if [ "$REGISTRY_TYPE" = "ghcr" ]; then
+              # Fallback to GHCR if ACR push failed (e.g. first run)
+              echo "Using GHCR as registry source (ACR push skipped/failed)"
               IMAGE="ghcr.io/${{ github.repository }}:$TAG"
+            else
+              # Default: Use ACR
+              # Always derive based on input environment to ensure we use the correct registry
+              PROJECT_NAME="${{ vars.PROJECT_NAME || 'lead-scoring' }}"
+              ENVIRONMENT="${{ github.event.inputs.environment || 'dev' }}"
+              ACR_NAME=$(echo "${PROJECT_NAME}${ENVIRONMENT}acr" | sed 's/-//g')
+              IMAGE="${ACR_NAME}.azurecr.io/${PROJECT_NAME}:${TAG}"
             fi
           fi
 

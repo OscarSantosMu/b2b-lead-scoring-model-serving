@@ -143,13 +143,11 @@ if [ "$CLOUD_CHOICE" = "1" ] || [ "$CLOUD_CHOICE" = "3" ]; then
     
     echo ""
     echo "Azure Container Registry (ACR) details:"
-    echo "Note: ACR authentication now uses OIDC (via Azure credentials above)."
-    read -rp "ACR_LOGIN_SERVER (Optional, e.g., myregistry.azurecr.io): " ACR_LOGIN_SERVER
+    echo "Note: ACR authentication uses OIDC (via Azure credentials above)."
+    echo "Note: ACR_LOGIN_SERVER is now dynamically calculated by the CI/CD pipeline based on environment."
+    echo "      (e.g., {project}{env}acr.azurecr.io)"
     
-    if [ -n "$ACR_LOGIN_SERVER" ]; then
-        gh secret set ACR_LOGIN_SERVER --body "$ACR_LOGIN_SERVER" --repo "$REPO"
-        print_success "Set ACR_LOGIN_SERVER"
-    fi
+    # Removed prompt for ACR_LOGIN_SERVER as it's no longer needed manually
     
     echo ""
 fi
