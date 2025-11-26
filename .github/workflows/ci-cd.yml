@@ -278,7 +278,7 @@ jobs:
           else
             # Fallback to convention: project+env+acr
             PROJECT_NAME="${{ vars.PROJECT_NAME || 'lead-scoring' }}"
-            ENVIRONMENT="dev"
+            ENVIRONMENT="${{ github.ref == 'refs/heads/main' && 'prod' || 'dev' }}"
             ACR_NAME=$(echo "${PROJECT_NAME}${ENVIRONMENT}acr" | sed 's/-//g')
             LOGIN_SERVER="${ACR_NAME}.azurecr.io"
           fi
