@@ -71,15 +71,15 @@ resource "azurerm_key_vault" "main" {
   resource_group_name        = azurerm_resource_group.main.name
   tenant_id                  = data.azurerm_client_config.current.tenant_id
   sku_name                   = "standard"
-  soft_delete_retention_days = 7
-  purge_protection_enabled   = false
+  soft_delete_retention_days = 14   # or 30 for more cushion
+  purge_protection_enabled   = false   # keep it off for now in this single-env test phase
 
   access_policy {
     tenant_id = data.azurerm_client_config.current.tenant_id
     object_id = data.azurerm_client_config.current.object_id
 
     secret_permissions = [
-      "Get", "List", "Set", "Delete", "Purge"
+      "Get", "List", "Set", "Delete"
     ]
   }
 
@@ -121,7 +121,7 @@ resource "azurerm_container_app" "main" {
 
     container {
       name   = "api"
-      image  = lower(var.docker_image)
+      image  = var.docker_image
       cpu    = 0.5
       memory = "1Gi"
 

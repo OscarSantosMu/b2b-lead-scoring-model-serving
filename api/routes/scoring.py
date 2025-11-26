@@ -3,17 +3,62 @@ Lead scoring API routes.
 """
 
 import logging
+import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 
+from api.app.datalake import write_scoring_result
 from api.app.model import get_model
 from api.middleware.auth import get_current_user
-from api.schemas.lead_features import ScoringRequest, ScoringResponse
+from api.schemas.lead_features import (
+    TIER_DEFINITIONS,
+    ModelInfo,
+    RankingInfo,
+    ScoreInfo,
+    ScoringRequest,
+    ScoringResponse,
+    TimingInfo,
+)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1", tags=["scoring"])
+
+API_VERSION = "1.0.0"
+
+
+def build_scoring_response(
+    request_id: str,
+    lead_id: str,
+    raw_score: float,
+    bucket: int,
+    tier: str,
+    latency_ms: float,
+    model_name: str,
+    model_version: str,
+    include_details: bool = False,
+) -> ScoringResponse:
+    """Build the scoring response with optional details."""
+    # Build score info
+    score_info = ScoreInfo(
+        raw_score=raw_score,
+        bucket=bucket,
+        tier=tier,
+        ranking=(RankingInfo(tier_definition=TIER_DEFINITIONS.copy()) if include_details else None),
+    )
+
+    # Build response
+    response = ScoringResponse(
+        request_id=request_id,
+        model=ModelInfo(name=model_name, version=model_version),
+        lead_id=lead_id,
+        score=score_info,
+        timing=TimingInfo(latency_ms=round(latency_ms, 2)) if include_details else None,
+        api_version=API_VERSION if include_details else None,
+    )
+
+    return response
 
 
 @router.post(
@@ -21,13 +66,19 @@ router = APIRouter(prefix="/api/v1", tags=["scoring"])
     response_model=ScoringResponse,
     status_code=status.HTTP_200_OK,
     summary="Score a single lead",
-    description="Score a B2B lead based on 50 features and return probability, tier, and confidence",
+    description="Score a B2B lead based on 50 features. Returns score bucket (1-5), tier (A-E), and raw probability.",
 )
 async def score_lead(
     request: ScoringRequest,
+    background_tasks: BackgroundTasks,
+    include_details: bool = Query(
+        default=False,
+        description="Include additional details like timing, tier definitions, and API version",
+    ),
     current_user: dict = Depends(get_current_user),
 ) -> ScoringResponse:
     """Score a single lead."""
+    request_id = str(uuid.uuid4())
     try:
         model = get_model()
 
@@ -35,32 +86,52 @@ async def score_lead(
         features_dict = request.features.model_dump()
 
         # Make prediction
-        score, confidence, tier = model.predict(features_dict)
+        raw_score, bucket, tier, latency_ms = model.predict(features_dict)
 
-        # Create response
-        response = ScoringResponse(
+        # Build response
+        response = build_scoring_response(
+            request_id=request_id,
             lead_id=request.lead_id,
-            score=score,
+            raw_score=raw_score,
+            bucket=bucket,
             tier=tier,
-            confidence=confidence,
+            latency_ms=latency_ms,
+            model_name=f"xgboost_lead_score_v{model.model_version.replace('.', '')}",
             model_version=model.model_version,
-            timestamp=datetime.now(UTC).isoformat(),
+            include_details=include_details,
+        )
+
+        # Write result to data lake in background (non-blocking)
+        timestamp = datetime.now(UTC).isoformat()
+        background_tasks.add_task(
+            write_scoring_result,
+            lead_id=request.lead_id,
+            bucket=bucket,
+            tier=tier,
+            raw_score=raw_score,
+            model_version=model.model_version,
+            timestamp=timestamp,
+            features=features_dict,
         )
 
         logger.info(
             "Lead scored successfully",
             extra={
+                "request_id": request_id,
                 "lead_id": request.lead_id,
-                "score": score,
+                "raw_score": raw_score,
+                "bucket": bucket,
                 "tier": tier,
-                "confidence": confidence,
             },
         )
 
         return response
 
     except Exception as e:
-        logger.error(f"Error scoring lead: {e}", extra={"lead_id": request.lead_id})
+        logger.error(
+            f"Error scoring lead: {e}",
+            extra={"lead_id": request.lead_id, "request_id": request_id},
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error scoring lead: {str(e)}",
@@ -76,6 +147,11 @@ async def score_lead(
 )
 async def score_leads_batch(
     requests: list[ScoringRequest],
+    background_tasks: BackgroundTasks,
+    include_details: bool = Query(
+        default=False,
+        description="Include additional details like timing, tier definitions, and API version",
+    ),
     current_user: dict = Depends(get_current_user),
 ) -> list[ScoringResponse]:
     """Score multiple leads in batch."""
@@ -88,20 +164,38 @@ async def score_leads_batch(
     try:
         model = get_model()
         responses = []
+        # Use consistent timestamp for all leads in the batch
+        batch_timestamp = datetime.now(UTC).isoformat()
 
         for req in requests:
+            request_id = str(uuid.uuid4())
             features_dict = req.features.model_dump()
-            score, confidence, tier = model.predict(features_dict)
+            raw_score, bucket, tier, latency_ms = model.predict(features_dict)
 
-            response = ScoringResponse(
+            response = build_scoring_response(
+                request_id=request_id,
                 lead_id=req.lead_id,
-                score=score,
+                raw_score=raw_score,
+                bucket=bucket,
                 tier=tier,
-                confidence=confidence,
+                latency_ms=latency_ms,
+                model_name=f"xgboost_lead_score_v{model.model_version.replace('.', '')}",
                 model_version=model.model_version,
-                timestamp=datetime.now(UTC).isoformat(),
+                include_details=include_details,
             )
             responses.append(response)
+
+            # Write each result to data lake in background
+            background_tasks.add_task(
+                write_scoring_result,
+                lead_id=req.lead_id,
+                bucket=bucket,
+                tier=tier,
+                raw_score=raw_score,
+                model_version=model.model_version,
+                timestamp=batch_timestamp,
+                features=features_dict,
+            )
 
         logger.info(f"Batch scored {len(requests)} leads successfully")
 

@@ -5,6 +5,15 @@ Features cover company firmographics, engagement metrics, and behavioral signals
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+# Tier definitions mapping bucket to tier
+TIER_DEFINITIONS = {
+    "A": "Highest conversion likelihood (bucket 5)",
+    "B": "High conversion likelihood (bucket 4)",
+    "C": "Medium conversion likelihood (bucket 3)",
+    "D": "Low conversion likelihood (bucket 2)",
+    "E": "Lowest conversion likelihood (bucket 1)",
+}
+
 
 class LeadFeatures(BaseModel):
     """50-feature schema for B2B lead scoring."""
@@ -149,20 +158,51 @@ class ScoringRequest(BaseModel):
     features: LeadFeatures
 
 
-class ScoringResponse(BaseModel):
-    """Response schema for lead scoring."""
+class ModelInfo(BaseModel):
+    """Model information in response."""
 
-    lead_id: str
-    score: float = Field(..., ge=0, le=1, description="Lead score probability 0-1")
-    tier: str = Field(..., description="Lead tier: hot, warm, cold")
-    confidence: float = Field(..., ge=0, le=1, description="Model confidence")
-    model_version: str
-    timestamp: str
+    name: str = Field(..., description="Model name")
+    version: str = Field(..., description="Model version")
+
+
+class TimingInfo(BaseModel):
+    """Timing information for the request."""
+
+    latency_ms: float = Field(..., description="Request latency in milliseconds")
+
+
+class RankingInfo(BaseModel):
+    """Ranking/tier definitions."""
+
+    tier_definition: dict[str, str] = Field(
+        default_factory=lambda: TIER_DEFINITIONS.copy(),
+        description="Tier definitions mapping",
+    )
+
+
+class ScoreInfo(BaseModel):
+    """Score information in response."""
+
+    raw_score: float = Field(..., ge=0, le=1, description="Raw probability score [0, 1]")
+    bucket: int = Field(..., ge=1, le=5, description="Score bucket 1-5")
+    tier: str = Field(..., description="Tier A-E based on bucket")
+    ranking: RankingInfo | None = Field(None, description="Tier ranking definitions")
 
     @field_validator("tier")
     @classmethod
     def validate_tier(cls, v):
         """Ensure tier is valid."""
-        if v not in ["hot", "warm", "cold"]:
-            raise ValueError("Tier must be hot, warm, or cold")
+        if v not in ["A", "B", "C", "D", "E"]:
+            raise ValueError("Tier must be A, B, C, D, or E")
         return v
+
+
+class ScoringResponse(BaseModel):
+    """Response schema for lead scoring."""
+
+    request_id: str = Field(..., description="Unique request identifier")
+    model: ModelInfo = Field(..., description="Model information")
+    lead_id: str = Field(..., description="Lead identifier")
+    score: ScoreInfo = Field(..., description="Score details")
+    timing: TimingInfo | None = Field(None, description="Timing information")
+    api_version: str | None = Field(None, description="API version")

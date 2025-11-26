@@ -23,6 +23,12 @@ else
     COMPOSE_CMD="docker-compose"
 fi
 
+# Check if Docker daemon is running
+if ! docker info > /dev/null 2>&1; then
+    echo "❌ Docker daemon is not running. Please start Docker Desktop."
+    exit 1
+fi
+
 # Start services
 echo "📦 Building and starting services..."
 $COMPOSE_CMD up -d --build
