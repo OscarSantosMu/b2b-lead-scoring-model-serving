@@ -95,19 +95,22 @@ def test_preprocess_features(model, sample_features):
 
 def test_predict(model, sample_features):
     """Test prediction."""
-    score, confidence, tier = model.predict(sample_features)
+    raw_score, bucket, tier, latency_ms = model.predict(sample_features)
 
-    assert isinstance(score, float)
-    assert 0 <= score <= 1
+    assert isinstance(raw_score, float)
+    assert 0 <= raw_score <= 1  # Raw score is 0-1
 
-    assert isinstance(confidence, float)
-    assert 0 <= confidence <= 1
+    assert isinstance(bucket, int)
+    assert 1 <= bucket <= 5  # Bucket is 1-5
 
-    assert tier in ["hot", "warm", "cold"]
+    assert tier in ["A", "B", "C", "D", "E"]
+
+    assert isinstance(latency_ms, float)
+    assert latency_ms >= 0
 
 
 def test_predict_hot_lead(model, sample_features):
-    """Test that high engagement leads to hot tier."""
+    """Test that high engagement leads to tier A."""
     # Boost all engagement metrics
     features = sample_features.copy()
     for key in features:
@@ -115,10 +118,11 @@ def test_predict_hot_lead(model, sample_features):
             if isinstance(features[key], int):
                 features[key] = min(features[key] * 5, 1000)
 
-    score, confidence, tier = model.predict(features)
+    raw_score, bucket, tier, latency_ms = model.predict(features)
     # Note: With stub model, tier depends on random initialization
     # Just check that prediction works
-    assert 0 <= score <= 1
+    assert 1 <= bucket <= 5
+    assert tier in ["A", "B", "C", "D", "E"]
 
 
 def test_predict_missing_feature(model):
@@ -138,10 +142,10 @@ def test_predict_batch(model, sample_features):
     results = model.predict_batch(features_list)
 
     assert len(results) == 3
-    for score, confidence, tier in results:
-        assert 0 <= score <= 1
-        assert 0 <= confidence <= 1
-        assert tier in ["hot", "warm", "cold"]
+    for raw_score, bucket, tier, _latency_ms in results:
+        assert 0 <= raw_score <= 1
+        assert 1 <= bucket <= 5
+        assert tier in ["A", "B", "C", "D", "E"]
 
 
 def test_get_feature_importance(model):
@@ -170,14 +174,11 @@ def test_get_model_info(model):
 
 
 def test_tier_thresholds(model, sample_features):
-    """Test tier assignment based on score."""
+    """Test tier assignment based on bucket (1-5)."""
     # We can't control exact scores with stub model
     # But we can verify the logic is consistent
-    score, _, tier = model.predict(sample_features)
+    raw_score, bucket, tier, _ = model.predict(sample_features)
 
-    if score >= 0.7:
-        assert tier == "hot"
-    elif score >= 0.4:
-        assert tier == "warm"
-    else:
-        assert tier == "cold"
+    # Verify tier mapping is correct
+    expected_tier = {5: "A", 4: "B", 3: "C", 2: "D", 1: "E"}[bucket]
+    assert tier == expected_tier

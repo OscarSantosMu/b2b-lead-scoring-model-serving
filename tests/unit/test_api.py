@@ -113,12 +113,39 @@ def test_score_lead_with_auth(sample_request):
     assert response.status_code == 200
     data = response.json()
 
+    # Check new response structure
+    assert "request_id" in data
+    assert "model" in data
+    assert data["model"]["name"].startswith("xgboost_lead_score_v")
+    assert "version" in data["model"]
     assert data["lead_id"] == "TEST-001"
-    assert 0 <= data["score"] <= 1
-    assert data["tier"] in ["hot", "warm", "cold"]
-    assert 0 <= data["confidence"] <= 1
-    assert "model_version" in data
-    assert "timestamp" in data
+    assert "score" in data
+    assert 0 <= data["score"]["raw_score"] <= 1
+    assert 1 <= data["score"]["bucket"] <= 5
+    assert data["score"]["tier"] in ["A", "B", "C", "D", "E"]
+    # Without include_details, timing and api_version should be None
+    assert data["timing"] is None
+    assert data["api_version"] is None
+
+
+def test_score_lead_with_details(sample_request):
+    """Test scoring endpoint with include_details=true."""
+    headers = {"X-API-Key": "demo-api-key-123"}
+    response = client.post(
+        "/api/v1/score?include_details=true", json=sample_request, headers=headers
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+
+    # Check that details are included
+    assert "request_id" in data
+    assert data["timing"] is not None
+    assert "latency_ms" in data["timing"]
+    assert data["api_version"] is not None
+    assert "ranking" in data["score"]
+    assert data["score"]["ranking"] is not None
+    assert "tier_definition" in data["score"]["ranking"]
 
 
 def test_score_lead_without_auth(sample_request):
@@ -146,8 +173,28 @@ def test_score_batch(sample_request):
     assert len(data) == 2
 
     for item in data:
-        assert 0 <= item["score"] <= 1
-        assert item["tier"] in ["hot", "warm", "cold"]
+        assert 1 <= item["score"]["bucket"] <= 5
+        assert item["score"]["tier"] in ["A", "B", "C", "D", "E"]
+        assert 0 <= item["score"]["raw_score"] <= 1
+
+
+def test_score_batch_with_details(sample_request):
+    """Test batch scoring endpoint with include_details=true."""
+    headers = {"X-API-Key": "demo-api-key-123"}
+    batch_request = [sample_request, sample_request.copy()]
+
+    response = client.post(
+        "/api/v1/score/batch?include_details=true", json=batch_request, headers=headers
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 2
+
+    for item in data:
+        assert item["timing"] is not None
+        assert item["api_version"] is not None
+        assert item["score"]["ranking"] is not None
 
 
 def test_score_batch_too_large(sample_request):

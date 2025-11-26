@@ -95,10 +95,28 @@ class TestScoringWorkflow:
 
         result = response.json()
         assert result["lead_id"] == sample_lead["lead_id"]
-        assert 0 <= result["score"] <= 1
-        assert result["tier"] in ["hot", "warm", "cold"]
-        assert "model_version" in result
-        assert "timestamp" in result
+        assert "request_id" in result
+        assert "model" in result
+        assert "score" in result
+        assert 1 <= result["score"]["bucket"] <= 5
+        assert result["score"]["tier"] in ["A", "B", "C", "D", "E"]
+        assert 0 <= result["score"]["raw_score"] <= 1
+
+    def test_end_to_end_scoring_with_details(self, sample_lead):
+        """Test scoring with include_details=true."""
+        headers = {"X-API-Key": "demo-api-key-123"}
+
+        response = client.post(
+            "/api/v1/score?include_details=true", json=sample_lead, headers=headers
+        )
+        assert response.status_code == 200
+
+        result = response.json()
+        assert result["timing"] is not None
+        assert "latency_ms" in result["timing"]
+        assert result["api_version"] is not None
+        assert result["score"]["ranking"] is not None
+        assert "tier_definition" in result["score"]["ranking"]
 
     def test_concurrent_requests(self, sample_lead):
         """Test handling of concurrent requests."""

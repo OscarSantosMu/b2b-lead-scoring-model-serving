@@ -17,7 +17,16 @@ from api.app.endpoint_client import EndpointClient, get_endpoint_client
 
 logger = logging.getLogger(__name__)
 
-# Metrics
+# Tier mapping: bucket -> tier
+BUCKET_TO_TIER = {
+    5: "A",
+    4: "B",
+    3: "C",
+    2: "D",
+    1: "E",
+}
+
+# Metrics with tier labels using A-E
 PREDICTION_COUNTER = Counter(
     "model_predictions_total", "Total predictions made", ["endpoint_provider", "tier"]
 )
@@ -27,17 +36,17 @@ PREDICTION_LATENCY = Histogram(
     ["endpoint_provider"],
     buckets=[0.001, 0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 1.0],
 )
-PREDICTION_SCORE_HISTOGRAM = Histogram(
-    "model_prediction_scores",
-    "Distribution of prediction scores",
+PREDICTION_BUCKET_HISTOGRAM = Histogram(
+    "model_prediction_buckets",
+    "Distribution of prediction buckets (1-5 scale)",
+    ["endpoint_provider"],
+    buckets=[1, 2, 3, 4, 5],
+)
+PREDICTION_RAW_SCORE_HISTOGRAM = Histogram(
+    "model_prediction_raw_scores",
+    "Distribution of raw prediction scores (0-1 probability)",
     ["endpoint_provider"],
     buckets=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
-)
-PREDICTION_CONFIDENCE_HISTOGRAM = Histogram(
-    "model_prediction_confidence",
-    "Distribution of prediction confidence scores",
-    ["endpoint_provider", "tier"],
-    buckets=[0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.99, 1.0],
 )
 PREDICTION_ERRORS = Counter(
     "model_prediction_errors_total",
@@ -354,13 +363,13 @@ class LeadScoringModel:
 
         return np.array([feature_vector])
 
-    def predict(self, features: dict) -> tuple[float, float, str]:
+    def predict(self, features: dict) -> tuple[float, int, str, float]:
         """
         Make prediction for a single lead.
         Supports both local model and cloud endpoints.
 
         Returns:
-            Tuple of (score, confidence, tier)
+            Tuple of (raw_score 0-1, bucket 1-5, tier A-E, latency_ms)
         """
         start_time = time.time()
         endpoint_provider = self.endpoint_provider
@@ -378,41 +387,45 @@ class LeadScoringModel:
                 dmatrix = xgb.DMatrix(X, feature_names=self.feature_names)
                 pred = self.model.predict(dmatrix)[0]
 
-            score = float(pred)
+            raw_score = float(pred)
 
-            # Calculate confidence (based on distance from decision boundary)
-            confidence = abs(2 * score - 1)  # 0 at boundary (0.5), 1 at extremes
+            # Convert probability (0-1) to bucket (1-5) using linear mapping:
+            # - probability 0.00 -> bucket 1 (lowest conversion likelihood)
+            # - probability 0.25 -> bucket 2
+            # - probability 0.50 -> bucket 3
+            # - probability 0.75 -> bucket 4
+            # - probability 1.00 -> bucket 5 (highest conversion likelihood)
+            bucket = int(round(raw_score * 4 + 1))
+            bucket = max(1, min(5, bucket))  # Clamp to valid range
 
-            # Determine tier
-            if score >= 0.7:
-                tier = "hot"
-            elif score >= 0.4:
-                tier = "warm"
-            else:
-                tier = "cold"
+            # Map bucket to tier (A-E)
+            tier = BUCKET_TO_TIER[bucket]
+
+            # Calculate latency
+            latency_ms = (time.time() - start_time) * 1000
 
             # Record detailed metrics
             PREDICTION_COUNTER.labels(endpoint_provider=endpoint_provider, tier=tier).inc()
 
-            PREDICTION_SCORE_HISTOGRAM.labels(endpoint_provider=endpoint_provider).observe(score)
+            PREDICTION_BUCKET_HISTOGRAM.labels(endpoint_provider=endpoint_provider).observe(bucket)
 
-            PREDICTION_CONFIDENCE_HISTOGRAM.labels(
-                endpoint_provider=endpoint_provider, tier=tier
-            ).observe(confidence)
+            PREDICTION_RAW_SCORE_HISTOGRAM.labels(endpoint_provider=endpoint_provider).observe(
+                raw_score
+            )
 
             # Log prediction with context
             logger.info(
                 "Prediction completed",
                 extra={
                     "endpoint_provider": endpoint_provider,
-                    "score": round(score, 4),
-                    "confidence": round(confidence, 4),
+                    "raw_score": round(raw_score, 4),
+                    "bucket": bucket,
                     "tier": tier,
-                    "latency_ms": round((time.time() - start_time) * 1000, 2),
+                    "latency_ms": round(latency_ms, 2),
                 },
             )
 
-            return score, confidence, tier
+            return raw_score, bucket, tier, latency_ms
 
         except Exception as e:
             # Record error metrics
@@ -436,8 +449,8 @@ class LeadScoringModel:
             latency = time.time() - start_time
             PREDICTION_LATENCY.labels(endpoint_provider=endpoint_provider).observe(latency)
 
-    def predict_batch(self, features_list: list[dict]) -> list[tuple[float, float, str]]:
-        """Make predictions for multiple leads."""
+    def predict_batch(self, features_list: list[dict]) -> list[tuple[float, int, str, float]]:
+        """Make predictions for multiple leads. Returns list of (raw_score 0-1, bucket 1-5, tier A-E, latency_ms)."""
         # Record batch size
         BATCH_SIZE_HISTOGRAM.observe(len(features_list))
 
