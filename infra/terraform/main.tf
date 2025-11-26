@@ -30,6 +30,9 @@ provider "azurerm" {
       # 2) On next apply, if a soft-deleted KV with same name exists → recover it instead of erroring
       recover_soft_deleted_key_vaults = true
     }
+    resource_group {
+      prevent_deletion_if_contains_resources = false
+    }
   }
 
   skip_provider_registration = true
