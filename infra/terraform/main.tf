@@ -21,7 +21,17 @@ terraform {
 
 # Provider configuration - only one will be used based on cloud_provider variable
 provider "azurerm" {
-  features {}
+  features {
+    key_vault {
+      # CI/CD apply-destroy-apply-destroy for DEV ENV only
+      # 1) DO NOT purge on destroy → keep soft delete as a safety net
+      purge_soft_delete_on_destroy    = false
+
+      # 2) On next apply, if a soft-deleted KV with same name exists → recover it instead of erroring
+      recover_soft_deleted_key_vaults = true
+    }
+  }
+
   skip_provider_registration = true
 }
 
