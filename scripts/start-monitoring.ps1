@@ -21,6 +21,13 @@ if (Get-Command "docker-compose" -ErrorAction SilentlyContinue) {
     exit 1
 }
 
+# Check if Docker daemon is running
+docker info 2>&1 | Out-Null
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "❌ Docker daemon is not running. Please start Docker Desktop."
+    exit 1
+}
+
 # Start services
 Write-Host "📦 Building and starting services..."
 Invoke-Expression "$ComposeCmd up -d --build"
