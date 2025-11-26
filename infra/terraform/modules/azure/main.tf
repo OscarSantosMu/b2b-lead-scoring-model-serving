@@ -8,21 +8,21 @@ resource "azurerm_resource_group" "main" {
   tags     = var.tags
 }
 
-# Virtual Network
-resource "azurerm_virtual_network" "main" {
-  name                = "${var.project_name}-vnet"
-  location            = azurerm_resource_group.main.location
-  resource_group_name = azurerm_resource_group.main.name
-  address_space       = ["10.0.0.0/16"]
-  tags                = var.tags
-}
+# Virtual Network (Commented out to save costs - VNet injection triggers Standard LB creation)
+# resource "azurerm_virtual_network" "main" {
+#   name                = "${var.project_name}-vnet"
+#   location            = azurerm_resource_group.main.location
+#   resource_group_name = azurerm_resource_group.main.name
+#   address_space       = ["10.0.0.0/16"]
+#   tags                = var.tags
+# }
 
-resource "azurerm_subnet" "container_apps" {
-  name                 = "container-apps-subnet"
-  resource_group_name  = azurerm_resource_group.main.name
-  virtual_network_name = azurerm_virtual_network.main.name
-  address_prefixes     = ["10.0.0.0/23"]
-}
+# resource "azurerm_subnet" "container_apps" {
+#   name                 = "container-apps-subnet"
+#   resource_group_name  = azurerm_resource_group.main.name
+#   virtual_network_name = azurerm_virtual_network.main.name
+#   address_prefixes     = ["10.0.0.0/23"]
+# }
 
 # Log Analytics Workspace
 resource "azurerm_log_analytics_workspace" "main" {
@@ -60,7 +60,7 @@ resource "azurerm_container_app_environment" "main" {
   location                   = azurerm_resource_group.main.location
   resource_group_name        = azurerm_resource_group.main.name
   log_analytics_workspace_id = azurerm_log_analytics_workspace.main.id
-  infrastructure_subnet_id   = azurerm_subnet.container_apps.id
+  # infrastructure_subnet_id   = azurerm_subnet.container_apps.id
     
   # Add this line to control the name of the managed RG
   infrastructure_resource_group_name = "${var.project_name}-${var.environment}-infra-rg"
