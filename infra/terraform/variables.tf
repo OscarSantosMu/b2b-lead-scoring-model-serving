@@ -32,6 +32,12 @@ variable "api_keys" {
   sensitive   = true
 }
 
+variable "log_level" {
+  description = "Logging level (DEBUG, INFO, WARNING, ERROR)"
+  type        = string
+  default     = "INFO"
+}
+
 # Scaling Configuration
 variable "min_replicas" {
   description = "Minimum number of replicas/instances"

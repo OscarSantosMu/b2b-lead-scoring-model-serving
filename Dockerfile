@@ -28,7 +28,8 @@ WORKDIR /app
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PORT=8000 \
-    WORKERS=4
+    WORKERS=4 \
+    LOG_LEVEL=INFO
 
 # Runtime OS deps
 RUN apt-get update && apt-get install -y --no-install-recommends \

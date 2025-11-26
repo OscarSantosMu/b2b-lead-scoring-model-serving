@@ -69,6 +69,7 @@ module "azure" {
   location                = var.azure_location
   docker_image            = var.docker_image
   api_keys                = var.api_keys
+  log_level               = var.log_level
   min_replicas            = var.min_replicas
   max_replicas            = var.max_replicas
   model_endpoint_provider = var.model_endpoint_provider
@@ -89,6 +90,7 @@ module "aws" {
   aws_region                = var.aws_region
   docker_image              = var.docker_image
   api_keys                  = var.api_keys
+  log_level                 = var.log_level
   min_instances             = var.min_replicas
   max_instances             = var.max_replicas
   model_endpoint_provider   = var.model_endpoint_provider

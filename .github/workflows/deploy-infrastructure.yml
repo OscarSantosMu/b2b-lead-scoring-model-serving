@@ -184,11 +184,33 @@ jobs:
           echo "Using Docker image: $IMAGE"
           echo "image=$IMAGE" >> $GITHUB_OUTPUT
 
+      - name: Load Configuration
+        id: load-config
+        run: |
+          ENVIRONMENT="${{ github.event.inputs.environment || 'dev' }}"
+          CONFIG_FILE="infra/config/environments.json"
+          
+          if [ -f "$CONFIG_FILE" ]; then
+            LOG_LEVEL=$(jq -r --arg env "$ENVIRONMENT" '.[$env].log_level // "INFO"' $CONFIG_FILE)
+            MIN_REPLICAS=$(jq -r --arg env "$ENVIRONMENT" '.[$env].min_replicas // 2' $CONFIG_FILE)
+            MAX_REPLICAS=$(jq -r --arg env "$ENVIRONMENT" '.[$env].max_replicas // 10' $CONFIG_FILE)
+          else
+            echo "Config file not found, using defaults"
+            LOG_LEVEL="INFO"
+            MIN_REPLICAS=2
+            MAX_REPLICAS=10
+          fi
+          
+          echo "log_level=$LOG_LEVEL" >> $GITHUB_OUTPUT
+          echo "min_replicas=$MIN_REPLICAS" >> $GITHUB_OUTPUT
+          echo "max_replicas=$MAX_REPLICAS" >> $GITHUB_OUTPUT
+
       - name: Terraform Plan
         id: tf-plan
         run: |
           exitcode=0
           CLOUD_PROVIDER="${{ github.event.inputs.cloud_provider || 'azure' }}"
+          ENVIRONMENT="${{ github.event.inputs.environment || 'dev' }}"
 
           if [ "$CLOUD_PROVIDER" = "aws" ]; then
             export TF_VAR_aws_region="${{ env.AWS_REGION }}"
@@ -197,11 +219,14 @@ jobs:
           fi
 
           terraform plan -detailed-exitcode -no-color -out=tfplan \
-            -var="environment=${{ github.event.inputs.environment || 'dev' }}" \
+            -var="environment=$ENVIRONMENT" \
             -var="cloud_provider=$CLOUD_PROVIDER" \
             -var="docker_image=${{ steps.docker-image.outputs.image }}" \
             -var="api_keys=${{ secrets.API_KEYS }}" \
             -var="project_name=${{ vars.PROJECT_NAME || 'lead-scoring' }}" \
+            -var="log_level=${{ steps.load-config.outputs.log_level }}" \
+            -var="min_replicas=${{ steps.load-config.outputs.min_replicas }}" \
+            -var="max_replicas=${{ steps.load-config.outputs.max_replicas }}" \
              || exitcode=$?
 
           echo "exitcode=$exitcode" >> $GITHUB_OUTPUT
@@ -310,4 +335,7 @@ jobs:
             -var="cloud_provider=$CLOUD_PROVIDER" \
             -var="docker_image=${{ steps.docker-image.outputs.image }}" \
             -var="api_keys=${{ secrets.API_KEYS }}" \
-            -var="project_name=${{ vars.PROJECT_NAME || 'lead-scoring' }}"
+            -var="project_name=${{ vars.PROJECT_NAME || 'lead-scoring' }}" \
+            -var="log_level=${{ steps.load-config.outputs.log_level }}" \
+            -var="min_replicas=${{ steps.load-config.outputs.min_replicas }}" \
+            -var="max_replicas=${{ steps.load-config.outputs.max_replicas }}"

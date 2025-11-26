@@ -132,7 +132,7 @@ resource "azurerm_container_app" "main" {
 
       env {
         name  = "LOG_LEVEL"
-        value = "INFO"
+        value = var.log_level
       }
 
       env {
