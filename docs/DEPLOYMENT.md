@@ -4,7 +4,31 @@ The B2B Lead Scoring service uses a CI/CD pipeline powered by GitHub Actions and
 
 ## CI/CD Pipeline
 
-The pipeline is defined in `.github/workflows/ci-cd.yml`.
+The CI/CD pipeline is implemented with GitHub Actions, providing automated testing, building, and deployment.
+
+### Workflow Files
+
+| File | Purpose |
+|------|---------|
+| `workflows/ci-cd.yml` | Main CI/CD pipeline |
+| `workflows/deploy-infrastructure.yml` | Infrastructure deployment |
+
+### Pipeline Stages
+
+```mermaid
+graph LR
+    A[Push/PR] --> B[Lint]
+    A --> C[Security Scan]
+    A --> D[Unit Tests]
+    B --> E{All Pass?}
+    C --> E
+    D --> E
+    E -->|Yes| F[Build Docker Image]
+    F --> G[Push to GHCR]
+    G --> H[Push to ACR/ECR]
+    H --> I[Deploy Infrastructure]
+    I --> J[Deploy Application]
+```
 
 ### Stages
 
