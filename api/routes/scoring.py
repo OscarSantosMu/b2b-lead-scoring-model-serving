@@ -64,6 +64,7 @@ def build_scoring_response(
 @router.post(
     "/score",
     response_model=ScoringResponse,
+    response_model_exclude_none=True,
     status_code=status.HTTP_200_OK,
     summary="Score a single lead",
     description="Score a B2B lead based on 50 features. Returns score bucket (1-5), tier (A-E), and raw probability.",
@@ -141,6 +142,7 @@ async def score_lead(
 @router.post(
     "/score/batch",
     response_model=list[ScoringResponse],
+    response_model_exclude_none=True,
     status_code=status.HTTP_200_OK,
     summary="Score multiple leads",
     description="Score multiple B2B leads in a single request",

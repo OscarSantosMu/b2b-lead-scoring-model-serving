@@ -123,9 +123,9 @@ def test_score_lead_with_auth(sample_request):
     assert 0 <= data["score"]["raw_score"] <= 1
     assert 1 <= data["score"]["bucket"] <= 5
     assert data["score"]["tier"] in ["A", "B", "C", "D", "E"]
-    # Without include_details, timing and api_version should be None
-    assert data["timing"] is None
-    assert data["api_version"] is None
+    # Without include_details, timing and api_version should be absent
+    assert "timing" not in data
+    assert "api_version" not in data
 
 
 def test_score_lead_with_details(sample_request):
