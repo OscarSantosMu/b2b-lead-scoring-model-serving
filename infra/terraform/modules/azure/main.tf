@@ -61,11 +61,11 @@ resource "azurerm_container_app_environment" "main" {
   resource_group_name        = azurerm_resource_group.main.name
   log_analytics_workspace_id = azurerm_log_analytics_workspace.main.id
   # infrastructure_subnet_id   = azurerm_subnet.container_apps.id
-    
+
   # Add this line to control the name of the managed RG
   infrastructure_resource_group_name = "${var.project_name}-${var.environment}-infra-rg"
-  
-  tags                       = var.tags
+
+  tags = var.tags
 }
 
 # Key Vault for secrets
@@ -75,8 +75,8 @@ resource "azurerm_key_vault" "main" {
   resource_group_name        = azurerm_resource_group.main.name
   tenant_id                  = data.azurerm_client_config.current.tenant_id
   sku_name                   = "standard"
-  soft_delete_retention_days = 14   # or 30 for more cushion
-  purge_protection_enabled   = false   # keep it off for now in this single-env test phase
+  soft_delete_retention_days = 14    # or 30 for more cushion
+  purge_protection_enabled   = false # keep it off for now in this single-env test phase
 
   access_policy {
     tenant_id = data.azurerm_client_config.current.tenant_id
@@ -90,12 +90,12 @@ resource "azurerm_key_vault" "main" {
   tags = var.tags
 }
 
-# Store API keys in Key Vault
-resource "azurerm_key_vault_secret" "api_keys" {
-  name         = "api-keys"
-  value        = var.api_keys
-  key_vault_id = azurerm_key_vault.main.id
-}
+# # Store API keys in Key Vault
+# resource "azurerm_key_vault_secret" "api_keys" {
+#   name         = "api-keys"
+#   value        = var.api_keys
+#   key_vault_id = azurerm_key_vault.main.id
+# }
 
 # Container App
 resource "azurerm_container_app" "main" {
@@ -145,8 +145,8 @@ resource "azurerm_container_app" "main" {
       }
 
       env {
-        name        = "API_KEYS"
-        secret_name = "api-keys"
+        name  = "API_KEYS"
+        value = var.api_keys
       }
 
       env {
