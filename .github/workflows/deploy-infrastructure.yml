@@ -166,6 +166,11 @@ jobs:
           CLOUD_PROVIDER="${{ github.event.inputs.cloud_provider || 'azure' }}"
           TAG="${{ github.event.inputs.image_tag || 'latest' }}"
           REGISTRY_TYPE="${{ github.event.inputs.registry_type || 'acr' }}"
+          
+          # Normalize repository name to lowercase for Docker/GHCR compatibility
+          # (Fixes "could not parse reference" error if username/repo has uppercase)
+          REPO_NAME="${{ github.repository }}"
+          LOWERCASE_REPO_NAME=$(echo "$REPO_NAME" | tr '[:upper:]' '[:lower:]')
 
           if [ "$CLOUD_PROVIDER" = "aws" ]; then
             if [ -n "${{ secrets.ECR_REGISTRY }}" ] && [ -n "${{ secrets.ECR_REPOSITORY }}" ]; then
@@ -173,14 +178,16 @@ jobs:
             elif [ -n "${{ secrets.DOCKER_IMAGE }}" ]; then
               IMAGE="${{ secrets.DOCKER_IMAGE }}"
             else
-              IMAGE="ghcr.io/${{ github.repository }}:$TAG"
+              IMAGE="ghcr.io/${LOWERCASE_REPO_NAME}:$TAG"
             fi
           else
             # Azure Logic
             if [ "$REGISTRY_TYPE" = "ghcr" ]; then
               # Fallback to GHCR if ACR push failed (e.g. first run)
+              # Since the repo is public, this should work without extra credentials
+              # provided the package visibility is also public.
               echo "Using GHCR as registry source (ACR push skipped/failed)"
-              IMAGE="ghcr.io/${{ github.repository }}:$TAG"
+              IMAGE="ghcr.io/${LOWERCASE_REPO_NAME}:$TAG"
             else
               # Default: Use ACR
               # Always derive based on input environment to ensure we use the correct registry
