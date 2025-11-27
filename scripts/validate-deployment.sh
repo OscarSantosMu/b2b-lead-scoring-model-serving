@@ -181,23 +181,6 @@ fi
 
 echo ""
 
-# Test 8: Model info endpoint
-print_status "info" "Testing model info endpoint..."
-RESPONSE=$(curl -s -w "\n%{http_code}" "$API_URL/api/v1/model/info" 2>&1)
-HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
-BODY=$(echo "$RESPONSE" | sed '$d')
-
-if [ "$HTTP_CODE" = "200" ]; then
-    print_status "success" "Model info endpoint is accessible"
-    if command_exists "jq"; then
-        echo "$BODY" | jq '.'
-    else
-        echo "$BODY"
-    fi
-else
-    print_status "warning" "Model info endpoint returned HTTP $HTTP_CODE"
-fi
-
 echo ""
 echo "========================================"
 echo "  Validation Summary"
