@@ -67,7 +67,7 @@ resource "azurerm_container_app_environment" "main" {
 
 # Key Vault for secrets
 resource "azurerm_key_vault" "main" {
-  count = var.enable_azure_ml ? 1 : 0
+  count                      = var.enable_azure_ml ? 1 : 0
   name                       = replace("${var.project_name}-${var.environment}-kv", "-", "")
   location                   = azurerm_resource_group.main.location
   resource_group_name        = azurerm_resource_group.main.name
@@ -206,7 +206,7 @@ resource "azurerm_container_app" "main" {
 
 # Grant Container App access to Key Vault
 resource "azurerm_key_vault_access_policy" "container_app" {
-  count = var.enable_azure_ml ? 1 : 0
+  count        = var.enable_azure_ml ? 1 : 0
   key_vault_id = azurerm_key_vault.main[0].id
   tenant_id    = data.azurerm_client_config.current.tenant_id
   object_id    = azurerm_container_app.main.identity[0].principal_id
