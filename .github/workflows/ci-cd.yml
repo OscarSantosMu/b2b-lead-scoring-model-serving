@@ -273,19 +273,24 @@ jobs:
       - name: Determine ACR Details
         id: acr
         run: |
-          if [ -n "${{ secrets.ACR_LOGIN_SERVER }}" ]; then
-            LOGIN_SERVER="${{ secrets.ACR_LOGIN_SERVER }}"
+          # We prioritize the naming convention over the static ACR_LOGIN_SERVER secret
+          # because the secret might point to 'dev' while we are deploying to 'prod'.
+          
+          PROJECT_NAME="${{ vars.PROJECT_NAME || 'lead-scoring' }}"
+          
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            ENVIRONMENT="prod"
           else
-            # Fallback to convention: project+env+acr
-            PROJECT_NAME="${{ vars.PROJECT_NAME || 'lead-scoring' }}"
-            ENVIRONMENT="${{ github.ref == 'refs/heads/main' && 'prod' || 'dev' }}"
-            ACR_NAME=$(echo "${PROJECT_NAME}${ENVIRONMENT}acr" | sed 's/-//g')
-            LOGIN_SERVER="${ACR_NAME}.azurecr.io"
+            ENVIRONMENT="dev"
           fi
+          
+          # Generate ACR name based on Terraform convention: {project}{env}acr (no hyphens)
+          ACR_NAME=$(echo "${PROJECT_NAME}${ENVIRONMENT}acr" | sed 's/-//g')
+          LOGIN_SERVER="${ACR_NAME}.azurecr.io"
+          
+          echo "Calculated ACR: $LOGIN_SERVER"
           echo "login_server=$LOGIN_SERVER" >> $GITHUB_OUTPUT
-          # Extract name from login server (assuming standard format)
-          NAME=$(echo "$LOGIN_SERVER" | cut -d. -f1)
-          echo "name=$NAME" >> $GITHUB_OUTPUT
+          echo "name=$ACR_NAME" >> $GITHUB_OUTPUT
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -294,9 +299,12 @@ jobs:
           install: true
 
       - name: Login to ACR
+        id: login-acr
+        continue-on-error: true
         run: az acr login --name ${{ steps.acr.outputs.name }}
 
       - name: Extract metadata (ACR)
+        if: steps.login-acr.outcome == 'success'
         id: meta
         uses: docker/metadata-action@v5
         with:
@@ -311,6 +319,7 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push Docker image to ACR
+        if: steps.login-acr.outcome == 'success'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -321,6 +330,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Choose ACR image tag with branch+sha pattern
+        if: steps.login-acr.outcome == 'success'
         id: choose-acr-image
         run: |
           echo "All tags:"
@@ -339,6 +349,7 @@ jobs:
 
     outputs:
       acr_image: ${{ steps.choose-acr-image.outputs.image }}
+      push_success: ${{ steps.login-acr.outcome == 'success' }}
 
   # Auto-deploy to appropriate environment after successful image builds
   deploy:
@@ -374,17 +385,25 @@ jobs:
           script: |
             // Determine environment based on branch
             const env = context.ref === 'refs/heads/main' ? 'prod' : 'dev';
-            console.log(`Triggering deployment for environment: ${env}`);
+            const branch = context.ref.replace('refs/heads/', '');
+            
+            // Check if ACR push was successful (it might fail on first run if ACR doesn't exist)
+            const acrPushSuccess = '${{ needs.publish-acr.outputs.push_success }}' === 'true';
+            const registryType = acrPushSuccess ? 'acr' : 'ghcr';
+            
+            console.log(`Triggering deployment for environment: ${env} on branch: ${branch}`);
+            console.log(`Registry Source: ${registryType} (ACR Push Success: ${acrPushSuccess})`);
 
             await github.rest.actions.createWorkflowDispatch({
               owner: context.repo.owner,
               repo: context.repo.repo,
               workflow_id: 'deploy-infrastructure.yml',
-              ref: 'main',
+              ref: branch,
               inputs: {
                 environment: env,
                 cloud_provider: "${{ secrets.CLOUD_PROVIDER || 'azure' }}",
                 image_tag: "${{ steps.get-tag.outputs.tag }}",
+                registry_type: registryType,
                 action: 'apply'
               }
             })
