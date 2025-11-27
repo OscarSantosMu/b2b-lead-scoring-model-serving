@@ -205,7 +205,8 @@ jobs:
         id: load-config
         run: |
           ENVIRONMENT="${{ github.event.inputs.environment || 'dev' }}"
-          CONFIG_FILE="infra/config/environments.json"
+          # Adjusted path because working-directory is infra/terraform
+          CONFIG_FILE="../config/environments.json"
           
           if [ -f "$CONFIG_FILE" ]; then
             LOG_LEVEL=$(jq -r --arg env "$ENVIRONMENT" '.[$env].log_level // "INFO"' $CONFIG_FILE)

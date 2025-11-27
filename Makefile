@@ -73,9 +73,11 @@ docker-compose-up:
 docker-compose-down:
 	docker-compose down
 
+HOST ?= http://localhost:8000
+
 load-test:
 	uv run locust -f tests/load/locustfile.py \
-		--host=http://localhost:8000 \
+		--host=$(HOST) \
 		--users=300 \
 		--spawn-rate=10 \
 		--run-time=1m \
